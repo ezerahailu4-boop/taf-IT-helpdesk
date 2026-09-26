@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+  background: var(--tg-theme-bg-color, #ffffff);
+  color: var(--tg-theme-text-color, #111111);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.card {
+  background: var(--tg-theme-section-bg-color, #ffffff);
+  border-radius: 1.1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+@keyframes pulse-skel {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.skeleton {
+  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  border-radius: 0.75rem;
+  animation: pulse-skel 1.4s ease-in-out infinite;
+}

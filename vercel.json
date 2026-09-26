@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/cron/sla-sweep", "schedule": "*/10 * * * *" }
+  ]
+}
