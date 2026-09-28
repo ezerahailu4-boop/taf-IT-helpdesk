@@ -21,7 +21,7 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
     "";
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const isDevOrDemo = process.env.NODE_ENV !== "production" || !botToken;
+  const isDevOrDemo = process.env.ALLOW_BROWSER_DEMO !== "false";
   const demoRole = req.headers.get("x-demo-role") || new URL(req.url).searchParams.get("demo_role");
 
   const db = supabaseAdmin();
