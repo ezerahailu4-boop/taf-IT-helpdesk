@@ -1,7 +1,7 @@
 // scripts/register-telegram-webhook-and-menu.mjs
 const BOT_TOKEN = '8921555430:AAFqSWlwNy2GRbjvAhW6M2lGKJ-75DYD4aY';
 const BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
-const PUBLIC_URL = process.argv[2] || process.env.NEXT_PUBLIC_APP_URL || 'https://observed-brothers-twin-sporting.trycloudflare.com';
+const PUBLIC_URL = process.argv[2] || process.env.NEXT_PUBLIC_APP_URL || 'https://it-helpdesk-alpha-brown.vercel.app';
 const SECRET_TOKEN = process.env.TELEGRAM_WEBHOOK_SECRET || 'taf_helpdesk_secret_2026';
 
 async function register() {

@@ -5,7 +5,7 @@ const pool = new Pool({
 });
 
 const BOT_TOKEN = '8921555430:AAFqSWlwNy2GRbjvAhW6M2lGKJ-75DYD4aY';
-const APP_URL = 'https://assist-nevertheless-licensing-protect.trycloudflare.com';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://it-helpdesk-alpha-brown.vercel.app';
 
 async function testNotification() {
   console.log('🧪 Testing Technician Assignment Notification...');

@@ -47,12 +47,11 @@ export default function CreateTicketPage() {
   const canNext =
     (step === 1 && !!categoryKey) ||
     (step === 2 && subject.trim().length >= 3 && description.trim().length >= 3) ||
-    step === 3 ||
-    step === 4;
+    step === 3;
 
   useEffect(() => {
-    if (step < 5) {
-      return showMainButton(step === 4 ? "Continue" : "Next", () => canNext && setStep(step + 1));
+    if (step < 4) {
+      return showMainButton(step === 3 ? "Continue to Review" : "Next", () => canNext && setStep(step + 1));
     }
     return showMainButton(submitting ? "Submitting…" : "🎫 Submit Ticket", submit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,84 +183,8 @@ export default function CreateTicketPage() {
         </div>
       )}
 
-      {/* STEP 3: Location and Optional Device */}
+      {/* STEP 3: Attachments */}
       {step === 3 && (
-        <div className="space-y-5">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Affected Device</h1>
-            <p className="text-xs" style={{ color: "var(--tg-theme-hint-color,#999)" }}>
-              Is this related to your assigned hardware? (Optional)
-            </p>
-          </div>
-
-          {/* Location Picker commented out
-          <div className="space-y-2">
-            <label className="text-xs font-semibold block">Select Location</label>
-            <div className="space-y-2">
-              {locations.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => {
-                    setLocationId(l.id);
-                    haptic("light");
-                  }}
-                  className={`card w-full p-3.5 text-left flex items-center justify-between border transition-all ${
-                    locationId === l.id ? "ring-2 ring-blue-500 font-semibold" : ""
-                  }`}
-                  style={{ borderColor: "rgba(0,0,0,0.06)" }}
-                >
-                  <span className="text-sm">📍 {l.name}</span>
-                  {locationId === l.id && <span className="text-blue-600 font-bold">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-          */}
-
-          {/* Optional Device Picker */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold block">Affected Device (Optional)</label>
-              {assetId && (
-                <button
-                  onClick={() => setAssetId(null)}
-                  className="text-xs text-blue-600 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              {assets.map((ast) => (
-                <button
-                  key={ast.id}
-                  onClick={() => {
-                    setAssetId(ast.id === assetId ? null : ast.id);
-                    haptic("light");
-                  }}
-                  className={`card w-full p-3 text-left flex items-center justify-between border transition-all ${
-                    assetId === ast.id ? "ring-2 ring-blue-500 font-semibold" : ""
-                  }`}
-                  style={{ borderColor: "rgba(0,0,0,0.06)" }}
-                >
-                  <div>
-                    <p className="text-xs font-medium">💻 {ast.type} — {ast.brand} {ast.model}</p>
-                    <p className="text-[11px] font-mono opacity-60">{ast.asset_tag}</p>
-                  </div>
-                  {assetId === ast.id && <span className="text-blue-600 font-bold">✓</span>}
-                </button>
-              ))}
-              {assets.length === 0 && (
-                <p className="text-xs opacity-60">No specific hardware device linked.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 4: Attachments */}
-      {step === 4 && (
         <div className="space-y-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Attachments</h1>
@@ -312,8 +235,8 @@ export default function CreateTicketPage() {
         </div>
       )}
 
-      {/* STEP 5: Review & Submit */}
-      {step === 5 && (
+      {/* STEP 4: Review & Submit */}
+      {step === 4 && (
         <div className="space-y-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Review & Submit</h1>
@@ -336,20 +259,6 @@ export default function CreateTicketPage() {
             <div>
               <span className="opacity-60 block">Description:</span>
               <p className="mt-0.5 whitespace-pre-wrap leading-relaxed opacity-90">{description}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-              <div>
-                <span className="opacity-60 block">Location:</span>
-                <span className="font-medium">
-                  {locations.find((l) => l.id === locationId)?.name ?? "General Office"}
-                </span>
-              </div>
-              <div>
-                <span className="opacity-60 block">Linked Device:</span>
-                <span className="font-medium">
-                  {assets.find((a) => a.id === assetId)?.asset_tag ?? "None"}
-                </span>
-              </div>
             </div>
             {files.length > 0 && (
               <div className="pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
@@ -376,14 +285,14 @@ export default function CreateTicketPage() {
             </button>
           )}
 
-          {step < 5 ? (
+          {step < 4 ? (
             <button
               onClick={() => canNext && setStep(step + 1)}
               disabled={!canNext}
               className="flex-1 py-3 rounded-2xl font-bold text-xs text-white shadow-md transition-all disabled:opacity-40"
               style={{ background: "var(--tg-theme-button-color, #2481cc)" }}
             >
-              {step === 4 ? "Continue to Review →" : "Next Step →"}
+              {step === 3 ? "Continue to Review →" : "Next Step →"}
             </button>
           ) : (
             <button
@@ -404,7 +313,7 @@ export default function CreateTicketPage() {
 function StepDots({ step }: { step: number }) {
   return (
     <div className="flex gap-1.5 mb-2 justify-center">
-      {[1, 2, 3, 4, 5].map((i) => (
+      {[1, 2, 3, 4].map((i) => (
         <div
           key={i}
           className="h-1.5 rounded-full transition-all"

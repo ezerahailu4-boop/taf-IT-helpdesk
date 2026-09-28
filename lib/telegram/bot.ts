@@ -65,3 +65,21 @@ export async function setMyCommands() {
 export async function setWebhook(url: string, secretToken: string) {
   return callTelegram("setWebhook", { url, secret_token: secretToken, allowed_updates: ["message", "callback_query"] });
 }
+
+export async function setChatMenuButton(chatId?: number | string, url?: string) {
+  const base =
+    url ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://it-helpdesk-alpha-brown.vercel.app");
+  const payload: Record<string, unknown> = {
+    menu_button: {
+      type: "web_app",
+      text: "🛠 Open IT Helpdesk",
+      web_app: { url: base }
+    }
+  };
+  if (chatId) {
+    payload.chat_id = chatId;
+  }
+  return callTelegram("setChatMenuButton", payload);
+}
