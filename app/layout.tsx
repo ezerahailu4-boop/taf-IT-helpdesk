@@ -17,11 +17,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <script
           dangerouslySetInnerHTML={{
             __html: `
               try {
+                // 1. Cache Telegram initData from hash if present
+                const hash = window.location.hash.slice(1);
+                if (hash) {
+                  const hp = new URLSearchParams(hash);
+                  const td = hp.get('tgWebAppData');
+                  if (td) sessionStorage.setItem('tg_init_data', td);
+                }
+                const sp = new URLSearchParams(window.location.search);
+                const sdata = sp.get('tgWebAppData') || sp.get('initData');
+                if (sdata) sessionStorage.setItem('tg_init_data', sdata);
+
+                // 2. Initialize theme
                 const saved = localStorage.getItem('it_helpdesk_theme');
                 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 if (saved === 'dark' || (!saved && prefersDark)) {

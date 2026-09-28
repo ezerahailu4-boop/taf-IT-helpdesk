@@ -78,9 +78,25 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
 
   // If in Dev or Demo mode and no valid Telegram initData is available:
   if (isDevOrDemo) {
-    let targetRole = (demoRole || "EMPLOYEE").toUpperCase();
+    const isAdminPath = req.nextUrl?.pathname?.includes("/admin");
+    const isTechPath = req.nextUrl?.pathname?.includes("/tech");
+    let defaultRole = isAdminPath ? "ADMIN" : isTechPath ? "TECHNICIAN" : "ADMIN"; // Default to ADMIN for dashboard access
+    let targetRole = (demoRole || defaultRole).toUpperCase();
     if (!["EMPLOYEE", "TECHNICIAN", "ADMIN"].includes(targetRole)) {
-      targetRole = "EMPLOYEE";
+      targetRole = "ADMIN";
+    }
+
+    // Try finding the real primary user first
+    if (targetRole === "ADMIN") {
+      const { data: adminUser } = await db
+        .from("users")
+        .select("*")
+        .eq("role", "ADMIN")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (adminUser) return adminUser as DbUser;
     }
 
     const { data: user } = await db
@@ -98,11 +114,12 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
     const { data: created } = await db
       .from("users")
       .insert({
-        telegram_id: targetRole === "ADMIN" ? 1005 : targetRole === "TECHNICIAN" ? 1002 : 1001,
-        telegram_username: targetRole.toLowerCase(),
-        first_name: targetRole === "ADMIN" ? "Sarah" : targetRole === "TECHNICIAN" ? "Daniel" : "Ezera",
-        last_name: targetRole === "ADMIN" ? "Connor" : targetRole === "TECHNICIAN" ? "Kebede" : "Hailu",
-        role: targetRole as any
+        telegram_id: targetRole === "ADMIN" ? 2074368152 : targetRole === "TECHNICIAN" ? 1002 : 1001,
+        telegram_username: targetRole === "ADMIN" ? "Ezrsh_404" : targetRole.toLowerCase(),
+        first_name: targetRole === "ADMIN" ? "Ezera" : targetRole === "TECHNICIAN" ? "Daniel" : "Employee",
+        last_name: targetRole === "ADMIN" ? "Hailu" : targetRole === "TECHNICIAN" ? "Worku" : "User",
+        role: targetRole as any,
+        is_registered: true
       })
       .select("*")
       .single();

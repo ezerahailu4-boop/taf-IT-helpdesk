@@ -24,24 +24,50 @@ export function useTelegram() {
   const [colorScheme, setColorScheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const tg = getTelegramWebApp();
-    if (!tg) {
-      // Running outside Telegram (e.g. local dev in a plain browser) — degrade gracefully.
-      setReady(true);
-      return;
-    }
-    tg.ready();
-    tg.expand();
-    setInitData(tg.initData || "");
-    setColorScheme(tg.colorScheme || "light");
-    applyThemeVars(tg.themeParams || {});
-    const onThemeChange = () => {
-      setColorScheme(tg.colorScheme || "light");
-      applyThemeVars(tg.themeParams || {});
+    let unmounted = false;
+
+    const init = () => {
+      const tg = getTelegramWebApp();
+      if (!tg) return false;
+
+      try {
+        tg.ready?.();
+        tg.expand?.();
+        const data = tg.initData || "";
+        if (data) {
+          setInitData(data);
+          try { sessionStorage.setItem("tg_init_data", data); } catch (e) {}
+        }
+        setColorScheme(tg.colorScheme || "light");
+        applyThemeVars(tg.themeParams || {});
+        tg.onEvent?.("themeChanged", () => {
+          setColorScheme(tg.colorScheme || "light");
+          applyThemeVars(tg.themeParams || {});
+        });
+      } catch (e) {
+        console.warn("Telegram WebApp initialization error:", e);
+      }
+      if (!unmounted) setReady(true);
+      return true;
     };
-    tg.onEvent?.("themeChanged", onThemeChange);
-    setReady(true);
-    return () => tg.offEvent?.("themeChanged", onThemeChange);
+
+    if (!init()) {
+      // Retry in case telegram-web-app.js takes a few ms to attach to window
+      const timer = setTimeout(() => {
+        if (!unmounted) {
+          init();
+          setReady(true);
+        }
+      }, 100);
+      return () => {
+        unmounted = true;
+        clearTimeout(timer);
+      };
+    }
+
+    return () => {
+      unmounted = true;
+    };
   }, []);
 
   const showMainButton = useCallback((text: string, onClick: () => void) => {

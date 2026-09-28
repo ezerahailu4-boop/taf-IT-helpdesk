@@ -1,6 +1,6 @@
 const BOT_TOKEN = '8921555430:AAFqSWlwNy2GRbjvAhW6M2lGKJ-75DYD4aY';
 const CHAT_ID = '2074368152';
-const URL = 'https://assist-nevertheless-licensing-protect.trycloudflare.com';
+const URL = 'https://it-helpdesk-alpha-brown.vercel.app';
 
 async function main() {
   const payload = {
