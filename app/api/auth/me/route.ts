@@ -28,8 +28,48 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await requireUser(req);
+    const db = supabaseAdmin();
+    const body = await req.json();
+
+    const updates: Record<string, any> = {
+      last_active_at: new Date().toISOString()
+    };
+
+    if (typeof body.firstName === "string" && body.firstName.trim()) {
+      updates.first_name = body.firstName.trim();
+    }
+    if (typeof body.lastName === "string") {
+      updates.last_name = body.lastName.trim();
+    }
+    if (typeof body.phone === "string") {
+      updates.phone = body.phone.trim();
+    }
+    if (body.departmentId) {
+      updates.department_id = body.departmentId;
+    }
+    updates.is_registered = true;
+
+    const { data: updated, error } = await db
+      .from("users")
+      .update(updates)
+      .eq("id", user.id)
+      .select("*")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return NextResponse.json({ user: updated, success: true });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 function tally(rows: { status: string }[]) {
   const c: Record<string, number> = {};
   for (const r of rows) c[r.status] = (c[r.status] ?? 0) + 1;
   return c;
 }
+

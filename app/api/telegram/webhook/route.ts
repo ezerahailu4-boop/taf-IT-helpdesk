@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
 
 async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from: any) {
   const { data: existing } = await db.from("users").select("*").eq("telegram_id", from.id).maybeSingle();
-  if (existing) return existing;
+  if (existing) {
+    if (from.username && from.username !== existing.telegram_username) {
+      await db.from("users").update({ telegram_username: from.username }).eq("id", existing.id);
+    }
+    return existing;
+  }
   const { data: created } = await db
     .from("users")
     .insert({
@@ -43,7 +48,8 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
       telegram_username: from.username,
       first_name: from.first_name,
       last_name: from.last_name,
-      role: "EMPLOYEE"
+      role: "EMPLOYEE",
+      is_registered: false
     })
     .select("*")
     .single();
@@ -52,14 +58,97 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
 
 async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any) {
   const chatId = message.chat.id;
-  const text: string = message.text ?? "";
-  const user = await upsertUserFromTelegram(db, message.from);
+  const text: string = (message.text ?? "").trim();
+  const from = message.from;
+  const user = await upsertUserFromTelegram(db, from);
+
+  // 1. Explicit /name or /register command
+  if (text.startsWith("/name") || text.startsWith("/register")) {
+    const rawName = text.replace(/^\/(name|register)/i, "").trim();
+    if (!rawName) {
+      await sendMessage(
+        chatId,
+        `📝 <b>Update Your Employee Name:</b>\nPlease reply with your full name, for example:\n<code>/name Ezera Hailu</code>`,
+        { parseMode: "HTML" }
+      );
+      return;
+    }
+    const parts = rawName.split(/\s+/);
+    const firstName = parts[0] || "";
+    const lastName = parts.slice(1).join(" ") || "";
+
+    await db.from("users").update({
+      first_name: firstName,
+      last_name: lastName,
+      is_registered: true,
+      telegram_username: from.username || user.telegram_username,
+      last_active_at: new Date().toISOString()
+    }).eq("id", user.id);
+
+    await sendMessage(
+      chatId,
+      `✅ <b>Profile Updated!</b>\n\nYour official name is now registered as:\n👤 <b>${firstName} ${lastName}</b>\nTelegram: @${from.username || "none"}\nID: <code>#${from.id}</code>\n\nOur IT team will see your official name on all your tickets.`,
+      {
+        parseMode: "HTML",
+        buttons: [
+          [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
+          [miniAppButton("🎫 My Tickets", "/tickets")]
+        ]
+      }
+    );
+    return;
+  }
+
+  // 2. If user is NOT yet registered
+  if (!user.is_registered) {
+    if (text.startsWith("/start")) {
+      await sendMessage(
+        chatId,
+        `👋 <b>Welcome to Company IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: Ezera Hailu</i>`,
+        { parseMode: "HTML" }
+      );
+      return;
+    }
+
+    // Free text: treat as full name registration
+    if (!text.startsWith("/")) {
+      const parts = text.split(/\s+/);
+      const firstName = parts[0] || "";
+      const lastName = parts.slice(1).join(" ") || "";
+
+      await db.from("users").update({
+        first_name: firstName,
+        last_name: lastName,
+        is_registered: true,
+        telegram_username: from.username || user.telegram_username,
+        last_active_at: new Date().toISOString()
+      }).eq("id", user.id);
+
+      await sendMessage(
+        chatId,
+        `✅ <b>Registration Successful!</b>\n\nWelcome, <b>${firstName} ${lastName}</b>!\nYour IT employee profile is now connected.\n\nTechnicians will now see your official name on all your support requests.`,
+        {
+          parseMode: "HTML",
+          buttons: [
+            [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
+            [miniAppButton("🎫 My Tickets", "/tickets")],
+            [miniAppButton("📚 Help Center", "/help")]
+          ]
+        }
+      );
+      return;
+    }
+  }
+
+  // 3. User is registered
+  const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || from.first_name || "Employee";
 
   if (text.startsWith("/start")) {
     await sendMessage(
       chatId,
-      `👋 Welcome to Company IT Support\nHow can we help you?`,
+      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>! How can we help you today?\n\n<i>(To update your name anytime, send <code>/name Your Name</code>)</i>`,
       {
+        parseMode: "HTML",
         buttons: [
           [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
           [miniAppButton("🎫 My Tickets", "/tickets")],
@@ -92,9 +181,9 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     return;
   }
 
-  // Any other free-text message: gentle nudge toward the Mini App rather than
-  // trying to parse free text into a ticket.
-  await sendMessage(chatId, "You can report an issue or check your tickets right here:", {
+  // Any other free-text message: gentle nudge toward the Mini App
+  await sendMessage(chatId, `Hello <b>${fullName}</b>, you can report an issue or check your tickets right here:`, {
+    parseMode: "HTML",
     buttons: [[miniAppButton("🛠 Open IT Helpdesk", "/home")]]
   });
 }

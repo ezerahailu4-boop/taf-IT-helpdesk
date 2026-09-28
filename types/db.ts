@@ -19,6 +19,7 @@ export interface DbUser {
   location_id: string | null;
   support_group_id: string | null;
   is_active: boolean;
+  is_registered?: boolean;
   created_at: string;
   last_active_at: string;
 }
