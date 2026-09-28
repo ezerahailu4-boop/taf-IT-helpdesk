@@ -22,7 +22,11 @@ async function callTelegram(method: string, payload: Record<string, unknown>) {
 }
 
 export function miniAppButton(text: string, path = "") {
-  const url = `${process.env.NEXT_PUBLIC_APP_URL}${path}`;
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://it-helpdesk-alpha-brown.vercel.app");
+  const cleanPath = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  const url = `${base.replace(/\/$/, "")}${cleanPath}`;
   return { text, web_app: { url } };
 }
 
