@@ -8,136 +8,295 @@ import type { DbTicket } from "@/types/db";
 
 export default function TechDashboard() {
   const { user, counts, loading, reload } = useMe();
-  const [critical, setCritical] = useState<DbTicket[] | null>(null);
-  const [unassigned, setUnassigned] = useState<DbTicket[] | null>(null);
-  const [highTickets, setHighTickets] = useState<DbTicket[] | null>(null);
+  const [activeTab, setActiveTab] = useState<"mine" | "unassigned" | "critical" | "waiting">("mine");
+  const [allTickets, setAllTickets] = useState<DbTicket[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [takingId, setTakingId] = useState<string | null>(null);
+
+  const fetchTickets = () => {
+    setFetching(true);
+    api<{ tickets: DbTicket[] }>("/api/tickets?scope=all")
+      .then((d) => {
+        setAllTickets(d.tickets);
+        setFetching(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load technician queue:", err);
+        setFetching(false);
+      });
+  };
 
   useEffect(() => {
-    api<{ tickets: DbTicket[] }>("/api/tickets?scope=all").then((d) => {
-      const open = d.tickets.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status));
-      setCritical(open.filter((t) => t.priority === "CRITICAL").slice(0, 3));
-      setHighTickets(open.filter((t) => t.priority === "HIGH").slice(0, 3));
-      setUnassigned(open.filter((t) => !t.assigned_technician_id).slice(0, 3));
-    });
+    fetchTickets();
   }, []);
 
-  const assigned = Object.values(counts).reduce((a, b) => a + b, 0);
-  const inProgress = counts["IN_PROGRESS"] ?? 0;
-  const waiting = (counts["WAITING_FOR_USER"] ?? 0) + (counts["WAITING_FOR_ADMIN"] ?? 0);
-  const overdue = critical?.filter((t) => t.resolution_due_at && new Date(t.resolution_due_at) < new Date()).length ?? 0;
+  const openTickets = allTickets.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status));
+  const myTickets = openTickets.filter((t) => t.assigned_technician_id === user?.id);
+  const unassigned = openTickets.filter((t) => !t.assigned_technician_id);
+  const critical = openTickets.filter((t) => t.priority === "CRITICAL" || t.priority === "HIGH");
+  const waiting = openTickets.filter((t) => t.status === "WAITING_FOR_USER" || t.status === "WAITING_FOR_ADMIN");
+  
+  // Quick take ticket directly from queue
+  const handleTakeTicket = async (ticketId: string) => {
+    setTakingId(ticketId);
+    try {
+      await api(`/api/tickets/${ticketId}/take`, { method: "POST" });
+      fetchTickets();
+      reload();
+    } catch (e: any) {
+      alert(e.message || "Failed to assign ticket");
+    } finally {
+      setTakingId(null);
+    }
+  };
+
+  const currentTabTickets =
+    activeTab === "mine"
+      ? myTickets
+      : activeTab === "unassigned"
+      ? unassigned
+      : activeTab === "critical"
+      ? critical
+      : waiting;
 
   return (
-    <div className="p-4 space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">👨‍💻 IT Support Console</h1>
-          <p className="text-xs" style={{ color: "var(--tg-theme-hint-color,#999)" }}>
-            Welcome back, {user?.first_name ?? "Technician"}
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto pb-24">
+      {/* Technician Console Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-sky-950 via-slate-900 to-cyan-950 text-white p-5 rounded-2xl shadow-lg border border-cyan-500/20">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 tracking-wide uppercase">
+              👨‍💻 IT Technician Console
+            </span>
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              On Duty • Ready for Dispatch
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            Support Workbench
+          </h1>
+          <p className="text-xs text-slate-300">
+            Welcome back, <span className="font-semibold text-white">{user?.first_name || "Technician"}</span>. Active tickets assigned to your queue.
           </p>
         </div>
+
+        {/* Quick Portal Switch Links */}
+        <div className="flex items-center gap-2">
+          {user?.role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600/80 hover:bg-indigo-600 text-white transition-all shadow-md"
+            >
+              <span>🛡️</span>
+              <span>Admin Center</span>
+            </Link>
+          )}
+          <Link
+            href="/home"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm"
+          >
+            <span>🏠</span>
+            <span>Employee View</span>
+          </Link>
+          <button
+            onClick={() => {
+              fetchTickets();
+              reload();
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm"
+            title="Refresh queue"
+          >
+            <span>🔄</span>
+            <span>Sync</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Technician Metric Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          onClick={() => setActiveTab("mine")}
+          className={`p-4 rounded-2xl border text-left transition-all ${
+            activeTab === "mine"
+              ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-500 shadow-sm ring-1 ring-cyan-500"
+              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span className="font-bold">My Active Queue</span>
+            <span className="text-sm">👤</span>
+          </div>
+          <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+            {loading ? "…" : myTickets.length}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Assigned to you</p>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("unassigned")}
+          className={`p-4 rounded-2xl border text-left transition-all ${
+            activeTab === "unassigned"
+              ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 shadow-sm ring-1 ring-amber-500"
+              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span className="font-bold">Unassigned</span>
+            <span className="text-sm">🙋</span>
+          </div>
+          <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-2">
+            {loading ? "…" : unassigned.length}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Needs technician</p>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("critical")}
+          className={`p-4 rounded-2xl border text-left transition-all ${
+            activeTab === "critical"
+              ? "bg-rose-50 dark:bg-rose-950/40 border-rose-500 shadow-sm ring-1 ring-rose-500"
+              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span className="font-bold">High & Critical</span>
+            <span className="text-sm">🚨</span>
+          </div>
+          <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-2">
+            {loading ? "…" : critical.length}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Urgent triage</p>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("waiting")}
+          className={`p-4 rounded-2xl border text-left transition-all ${
+            activeTab === "waiting"
+              ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 shadow-sm ring-1 ring-indigo-500"
+              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span className="font-bold">Waiting on User</span>
+            <span className="text-sm">⏳</span>
+          </div>
+          <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-2">
+            {loading ? "…" : waiting.length}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Customer replies</p>
+        </button>
+      </div>
+
+      {/* Interactive Tab Switcher */}
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setActiveTab("mine")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === "mine"
+                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            My Active ({myTickets.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("unassigned")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === "unassigned"
+                ? "bg-amber-600 text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            Unassigned Pool ({unassigned.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("critical")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === "critical"
+                ? "bg-rose-600 text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            Critical & High ({critical.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("waiting")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === "waiting"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            Waiting on Info ({waiting.length})
+          </button>
+        </div>
+
         <Link
           href="/tickets"
-          className="text-xs font-semibold px-3 py-1.5 rounded-full card border"
-          style={{ color: "var(--tg-theme-button-color, #2481cc)" }}
+          className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline flex-shrink-0"
         >
-          View Full Queue →
+          All Tickets →
         </Link>
       </div>
 
-      {/* Metrics Grid */}
-      <div className="card p-4 border" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-        <p className="font-semibold text-xs uppercase tracking-wider mb-3 opacity-60">My Queue Metrics</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <Stat label="Assigned" value={loading ? "…" : assigned} href="/tickets?tab=mine" />
-          <Stat label="In Progress" value={inProgress} href="/tickets" />
-          <Stat label="Waiting" value={waiting} href="/tickets?tab=waiting" />
-          <Stat label="Overdue" value={overdue} accent="#B42318" href="/tickets?tab=overdue" />
-        </div>
-      </div>
+      {/* Tickets List Area */}
+      <div className="space-y-3">
+        {fetching && <CardSkeleton />}
 
-      {/* Fast Tabs Navigation */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-xs">
-        <Link href="/tickets?tab=mine" className="card p-2.5 text-center font-semibold border hover:border-blue-400 transition-colors">
-          👤 My Tickets
-        </Link>
-        <Link href="/tickets?tab=unassigned" className="card p-2.5 text-center font-semibold border hover:border-blue-400 transition-colors">
-          🙋 Unassigned ({unassigned?.length ?? 0})
-        </Link>
-        <Link href="/tickets?tab=critical" className="card p-2.5 text-center font-semibold border hover:border-blue-400 transition-colors text-red-600">
-          🚨 Critical ({critical?.length ?? 0})
-        </Link>
-        <Link href="/tickets?tab=overdue" className="card p-2.5 text-center font-semibold border hover:border-blue-400 transition-colors text-amber-700">
-          ⏰ Overdue
-        </Link>
-        <Link href="/tickets?tab=waiting" className="card p-2.5 text-center font-semibold border hover:border-blue-400 transition-colors">
-          ⏳ Waiting
-        </Link>
-      </div>
+        {!fetching && currentTabTickets.length === 0 && (
+          <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center space-y-2 shadow-sm">
+            <span className="text-3xl block">
+              {activeTab === "unassigned" ? "🙌" : activeTab === "critical" ? "🎉" : "☕"}
+            </span>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              {activeTab === "unassigned"
+                ? "No unassigned tickets in queue!"
+                : activeTab === "critical"
+                ? "Zero critical or high priority tickets open."
+                : "Your active queue is empty."}
+            </p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              {activeTab === "mine"
+                ? "Check the Unassigned Pool above to pick up new incoming employee requests."
+                : "Great job keeping response and resolution times fast!"}
+            </p>
+            {activeTab === "mine" && unassigned.length > 0 && (
+              <button
+                onClick={() => setActiveTab("unassigned")}
+                className="mt-3 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md transition-colors"
+              >
+                View {unassigned.length} Unassigned Tickets →
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* Critical Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="font-bold text-sm flex items-center gap-1.5 text-red-600">
-            <span>🔴</span> Critical Priority
-          </p>
-          <Link href="/tickets?tab=critical" className="text-xs font-medium text-blue-600 hover:underline">
-            View all
-          </Link>
-        </div>
-        <div className="space-y-2">
-          {critical === null && <CardSkeleton />}
-          {critical?.length === 0 && <EmptyState icon="🎉" title="No critical tickets right now." />}
-          {critical?.map((t) => <TicketCard key={t.id} ticket={t} />)}
-        </div>
-      </div>
+        {!fetching &&
+          currentTabTickets.map((ticket) => (
+            <div key={ticket.id} className="relative group">
+              <TicketCard ticket={ticket} />
 
-      {/* High Priority Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="font-bold text-sm flex items-center gap-1.5 text-amber-600">
-            <span>🟠</span> High Priority
-          </p>
-          <Link href="/tickets" className="text-xs font-medium text-blue-600 hover:underline">
-            View all
-          </Link>
-        </div>
-        <div className="space-y-2">
-          {highTickets === null && <CardSkeleton />}
-          {highTickets?.length === 0 && <div className="card p-4 text-center text-xs opacity-60">No open high priority tickets.</div>}
-          {highTickets?.map((t) => <TicketCard key={t.id} ticket={t} />)}
-        </div>
-      </div>
-
-      {/* Unassigned Work Queue */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="font-bold text-sm flex items-center gap-1.5">
-            <span>🙋</span> Unassigned Queue (Ready to take)
-          </p>
-          <Link href="/tickets?tab=unassigned" className="text-xs font-medium text-blue-600 hover:underline">
-            View all
-          </Link>
-        </div>
-        <div className="space-y-2">
-          {unassigned === null && <CardSkeleton />}
-          {unassigned?.length === 0 && <div className="card p-4 text-center text-xs opacity-60">All tickets currently assigned! 🎉</div>}
-          {unassigned?.map((t) => <TicketCard key={t.id} ticket={t} />)}
-        </div>
+              {/* Quick Action Button overlay for unassigned tickets */}
+              {!ticket.assigned_technician_id && (
+                <div className="mt-1 flex justify-end px-2">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleTakeTicket(ticket.id);
+                    }}
+                    disabled={takingId === ticket.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
+                  >
+                    <span>⚡</span>
+                    <span>{takingId === ticket.id ? "Assigning…" : "Assign to Me"}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
       </div>
     </div>
   );
-}
-
-function Stat({ label, value, accent, href }: { label: string; value: number | string; accent?: string; href?: string }) {
-  const content = (
-    <div>
-      <p className="text-2xl font-bold tracking-tight" style={{ color: accent }}>{value}</p>
-      <p className="text-xs opacity-60 mt-0.5">{label}</p>
-    </div>
-  );
-
-  if (href) {
-    return <Link href={href} className="block hover:opacity-80 transition-opacity">{content}</Link>;
-  }
-  return content;
 }
