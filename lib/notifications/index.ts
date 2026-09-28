@@ -42,11 +42,49 @@ export async function notifyNewTicketToItGroup(
 }
 
 export async function notifyTicketAssigned(db: SupabaseClient, ticket: DbTicket, requester: DbUser, technician: DbUser) {
-  const text =
-    `👨‍💻 Your IT ticket has been assigned.\n\n` +
-    `Technician: <b>${technician.first_name ?? "Support"}</b>\nIT Support`;
-  await sendMessage(requester.telegram_id, text, { buttons: [[miniAppButton("View Ticket", `/tickets/${ticket.id}`)]] });
-  await log(db, requester.id, ticket.id, "TICKET_ASSIGNED", "Ticket assigned", text);
+  // 1. Notify the employee that their ticket has a technician assigned
+  if (requester?.telegram_id) {
+    const requesterText =
+      `👨‍💻 <b>Your IT ticket has been assigned</b>\n\n` +
+      `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+      `👨‍💻 <b>Assigned Technician:</b> <b>${technician.first_name ?? "Support"} ${technician.last_name ?? ""}</b>\n` +
+      `Our technician is reviewing your issue.`;
+    await sendMessage(requester.telegram_id, requesterText, {
+      buttons: [[miniAppButton("👁 View Ticket", `/tickets/${ticket.id}`)]],
+      parseMode: "HTML"
+    });
+    await log(db, requester.id, ticket.id, "TICKET_ASSIGNED", "Ticket assigned", requesterText);
+  }
+
+  // 2. Notify the technician that a ticket was assigned to them
+  if (technician?.telegram_id) {
+    const requesterName = `${requester?.first_name ?? "Employee"} ${requester?.last_name ?? ""}`.trim();
+    const techText =
+      `📋 <b>NEW TICKET ASSIGNED TO YOU</b>\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+      `📝 <b>Issue:</b> ${ticket.subject}\n` +
+      `👤 <b>Requester:</b> <b>${requesterName}</b>${requester?.telegram_username ? ` (@${requester.telegram_username})` : ""}\n` +
+      (requester?.phone ? `📞 <b>Phone:</b> ${requester.phone}\n` : "") +
+      `${priorityEmoji[ticket.priority] || "🟡"} <b>Priority:</b> ${ticket.priority}\n\n` +
+      `Please review and begin triage in your console.`;
+
+    const techButtons: any[] = [
+      [miniAppButton("🛠 Open in Tech Console", `/tickets/${ticket.id}`)]
+    ];
+
+    if (requester?.telegram_username) {
+      techButtons.push([
+        { text: `💬 Chat with ${requester.first_name ?? "Requester"}`, url: `https://t.me/${requester.telegram_username}` }
+      ]);
+    }
+
+    await sendMessage(technician.telegram_id, techText, {
+      buttons: techButtons,
+      parseMode: "HTML"
+    });
+    await log(db, technician.id, ticket.id, "TECH_ASSIGNED", "Ticket assigned to you", techText);
+  }
 }
 
 export async function notifyReply(
