@@ -235,9 +235,9 @@ export default function TicketDetailPage() {
   return (
     <div className="flex flex-col h-[100dvh]">
       {/* Ticket Header & Metadata */}
-      <div className="p-4 border-b space-y-3 shrink-0" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+      <div className="p-4 border-b border-slate-200/80 dark:border-slate-800 space-y-3 shrink-0">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono font-bold" style={{ color: "var(--tg-theme-hint-color,#999)" }}>
+          <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
             {ticket.ticket_number}
           </span>
           <div className="flex items-center gap-1.5">
@@ -246,12 +246,12 @@ export default function TicketDetailPage() {
           </div>
         </div>
 
-        <h1 className="font-bold text-lg leading-snug tracking-tight">{ticket.subject}</h1>
+        <h1 className="font-bold text-lg leading-snug tracking-tight text-slate-900 dark:text-white">{ticket.subject}</h1>
 
         {/* Visual Lifecycle Timeline */}
         <div className="py-1">
           <div className="flex items-center justify-between relative">
-            <div className="absolute top-2 left-3 right-3 h-0.5 bg-gray-200 dark:bg-gray-700 -z-0" />
+            <div className="absolute top-2 left-3 right-3 h-0.5 bg-slate-200 dark:bg-slate-700 -z-0" />
             {statusSteps.map((st, idx) => {
               const done = currentStepIdx >= idx || ticket.status === "RESOLVED" && idx <= 3 || ticket.status === "CLOSED";
               const current = ticket.status === st.key;
@@ -260,15 +260,15 @@ export default function TicketDetailPage() {
                   <div
                     className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold transition-all ${
                       current
-                        ? "ring-4 ring-blue-100 bg-blue-600 text-white"
+                        ? "ring-4 ring-indigo-100 dark:ring-indigo-950 bg-indigo-600 text-white"
                         : done
-                        ? "bg-green-600 text-white"
-                        : "bg-gray-300 dark:bg-gray-600 text-gray-500"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-300 dark:bg-slate-700 text-slate-500"
                     }`}
                   >
                     {done ? "✓" : idx + 1}
                   </div>
-                  <span className={`text-[9px] ${current ? "font-bold text-blue-600" : "opacity-60"}`}>
+                  <span className={`text-[9px] ${current ? "font-bold text-indigo-600 dark:text-indigo-400" : "opacity-60"}`}>
                     {st.label}
                   </span>
                 </div>
@@ -279,7 +279,7 @@ export default function TicketDetailPage() {
 
         {/* Requester Identity Card for Staff */}
         {isStaff && requester && (
-          <div className="card p-3 rounded-xl border space-y-1.5 text-xs" style={{ borderColor: "rgba(0,0,0,0.06)", background: "rgba(0,0,0,0.02)" }}>
+          <div className="card p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-1.5 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-bold text-[11px] uppercase tracking-wide opacity-60">Reported By</span>
               {requester.telegram_username ? (
@@ -480,10 +480,9 @@ export default function TicketDetailPage() {
           item.kind === "note" ? (
             <div
               key={item.id}
-              className="mx-auto max-w-[92%] text-xs rounded-2xl p-3 border shadow-sm"
-              style={{ background: "#FEF6E7", color: "#92650A", borderColor: "#FDE68A" }}
+              className="mx-auto max-w-[92%] text-xs rounded-2xl p-3 border shadow-sm bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800/60"
             >
-              <div className="flex items-center justify-between font-bold text-[10px] uppercase tracking-wider mb-1">
+              <div className="flex items-center justify-between font-bold text-[10px] uppercase tracking-wider mb-1 text-amber-700 dark:text-amber-400">
                 <span>🔒 Technician Internal Note (Hidden from employee)</span>
                 <span>{new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
               </div>
@@ -501,11 +500,11 @@ export default function TicketDetailPage() {
         )}
 
         {ticket.resolution_note && (
-          <div className="card p-3 rounded-2xl text-xs space-y-1 border bg-green-50/50" style={{ borderColor: "#BBF7D0" }}>
-            <p className="font-bold text-green-900 flex items-center gap-1">
+          <div className="card p-3 rounded-2xl text-xs space-y-1 border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/40">
+            <p className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
               <span>✅</span> Resolution Summary
             </p>
-            <p className="text-green-800 whitespace-pre-wrap">{ticket.resolution_note}</p>
+            <p className="text-emerald-800 dark:text-emerald-200 whitespace-pre-wrap">{ticket.resolution_note}</p>
           </div>
         )}
       </div>
@@ -641,17 +640,17 @@ function Bubble({
   const isEmployee = role === "EMPLOYEE";
   return (
     <div className={`max-w-[85%] ${isEmployee ? "mr-auto" : "ml-auto"}`}>
-      <p className="text-[11px] mb-1 font-semibold flex items-center gap-1 opacity-70">
+      <p className="text-[11px] mb-1 font-semibold flex items-center gap-1 text-slate-500 dark:text-slate-400">
         <span>{isEmployee ? "👤" : "👨‍💻"}</span>
         <span>{name}</span>
         <span className="font-normal opacity-60">· {new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
       </p>
       <div
-        className="rounded-2xl px-4 py-2.5 text-xs whitespace-pre-wrap leading-relaxed shadow-sm"
-        style={{
-          background: isEmployee ? "var(--tg-theme-secondary-bg-color,#f2f2f7)" : "var(--tg-theme-button-color,#2481cc)",
-          color: isEmployee ? "var(--tg-theme-text-color,#111)" : "var(--tg-theme-button-text-color,#fff)"
-        }}
+        className={`rounded-2xl px-4 py-2.5 text-xs whitespace-pre-wrap leading-relaxed shadow-sm ${
+          isEmployee
+            ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80"
+            : "bg-indigo-600 text-white"
+        }`}
       >
         {message}
       </div>

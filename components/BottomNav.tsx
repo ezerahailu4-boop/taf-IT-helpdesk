@@ -32,14 +32,7 @@ export function BottomNav({ role }: { role: UserRole }) {
   const items = NAV[role] ?? NAV.EMPLOYEE;
 
   return (
-    <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t safe-bottom backdrop-blur-lg transition-colors"
-      style={{
-        background: "var(--tg-theme-bg-color, #ffffff)",
-        borderColor: "rgba(0,0,0,0.08)",
-        boxShadow: "0 -4px 16px rgba(0,0,0,0.03)"
-      }}
-    >
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 dark:border-slate-800/80 safe-bottom bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl shadow-lg transition-colors">
       <div className="max-w-md sm:max-w-xl mx-auto">
         <ul className="flex justify-around items-center px-2 py-1">
           {items.map((item) => {
@@ -50,14 +43,15 @@ export function BottomNav({ role }: { role: UserRole }) {
               <li key={item.href} className="flex-1">
                 <Link
                   href={item.href}
-                  className="flex flex-col items-center justify-center py-1.5 text-[11px] font-medium transition-all group"
-                  style={{
-                    color: active ? "var(--tg-theme-button-color, #2481cc)" : "var(--tg-theme-hint-color, #94a3b8)"
-                  }}
+                  className={`flex flex-col items-center justify-center py-1.5 text-[11px] font-medium transition-all group ${
+                    active
+                      ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
                 >
                   <span
                     className={`text-xl transition-transform duration-150 ${
-                      active ? "scale-110 font-bold" : "group-hover:scale-105 opacity-80"
+                      active ? "scale-110 drop-shadow-sm" : "group-hover:scale-105 opacity-80"
                     }`}
                   >
                     {item.icon}

@@ -2,10 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --tg-theme-bg-color: #f8fafc;
+  --tg-theme-text-color: #0f172a;
+  --tg-theme-hint-color: #64748b;
+  --tg-theme-link-color: #3b82f6;
+  --tg-theme-button-color: #2563eb;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #f1f5f9;
+  --tg-theme-section-bg-color: #ffffff;
+  --card-border: rgba(226, 232, 240, 0.9);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  color-scheme: light;
+}
+
+html.dark {
+  --tg-theme-bg-color: #0b0f19;
+  --tg-theme-text-color: #f8fafc;
+  --tg-theme-hint-color: #94a3b8;
+  --tg-theme-link-color: #60a5fa;
+  --tg-theme-button-color: #3b82f6;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #151c2c;
+  --tg-theme-section-bg-color: #111827;
+  --card-border: rgba(51, 65, 85, 0.7);
+  --glass-bg: rgba(17, 24, 39, 0.85);
+  color-scheme: dark;
+}
+
 html, body {
-  height: 100%;
-  background: var(--tg-theme-bg-color, #ffffff);
-  color: var(--tg-theme-text-color, #111111);
+  min-height: 100%;
+  background: var(--tg-theme-bg-color, #f8fafc);
+  color: var(--tg-theme-text-color, #0f172a);
+  transition: background-color 0.25s ease, color 0.25s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -22,25 +52,49 @@ html, body {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.15rem 0.6rem;
+  gap: 0.35rem;
+  padding: 0.22rem 0.65rem;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
 }
 
 .card {
   background: var(--tg-theme-section-bg-color, #ffffff);
-  border-radius: 1.1rem;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  border: 1px solid var(--card-border);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03), 0 1px 2px rgba(0,0,0,0.02);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+html.dark .card {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
 }
 
 @keyframes pulse-skel {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.4; }
 }
 .skeleton {
-  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  background: var(--tg-theme-secondary-bg-color, #f1f5f9);
   border-radius: 0.75rem;
   animation: pulse-skel 1.4s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.45);
 }

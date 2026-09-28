@@ -12,7 +12,7 @@ export default function AppGroupLayout({ children }: { children: React.ReactNode
       {user && <TopHeader user={user} />}
       <DemoRoleSwitcher currentRole={user?.role} />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto pb-20">
+      <main className="flex-1 max-w-6xl w-full mx-auto pb-24">
         {children}
       </main>
 

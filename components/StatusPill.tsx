@@ -1,38 +1,98 @@
 import type { TicketPriority, TicketStatus } from "@/types/db";
 
-const STATUS_STYLE: Record<TicketStatus, { bg: string; fg: string; label: string; icon: string }> = {
-  NEW: { bg: "#E8F0FE", fg: "#1A56DB", label: "New", icon: "🆕" },
-  ASSIGNED: { bg: "#EFE9FE", fg: "#6D28D9", label: "Assigned", icon: "📌" },
-  IN_PROGRESS: { bg: "#FEF6E7", fg: "#92650A", label: "In Progress", icon: "🟡" },
-  WAITING_FOR_USER: { bg: "#FEF2E7", fg: "#9A3412", label: "Waiting on you", icon: "⏳" },
-  WAITING_FOR_ADMIN: { bg: "#FEF2E7", fg: "#9A3412", label: "Waiting on admin", icon: "⏳" },
-  RESOLVED: { bg: "#E7F8EE", fg: "#0F7A3D", label: "Resolved", icon: "✅" },
-  CLOSED: { bg: "#EEF0F2", fg: "#4B5563", label: "Closed", icon: "🔒" },
-  REOPENED: { bg: "#FDECEC", fg: "#B42318", label: "Reopened", icon: "🔄" },
-  CANCELLED: { bg: "#EEF0F2", fg: "#6B7280", label: "Cancelled", icon: "🚫" }
+const STATUS_CONFIG: Record<
+  TicketStatus,
+  { label: string; icon: string; className: string }
+> = {
+  NEW: {
+    label: "New",
+    icon: "🆕",
+    className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+  },
+  ASSIGNED: {
+    label: "Assigned",
+    icon: "📌",
+    className: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+  },
+  IN_PROGRESS: {
+    label: "In Progress",
+    icon: "🟡",
+    className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+  },
+  WAITING_FOR_USER: {
+    label: "Waiting on User",
+    icon: "⏳",
+    className: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20"
+  },
+  WAITING_FOR_ADMIN: {
+    label: "Waiting on Admin",
+    icon: "⏳",
+    className: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20"
+  },
+  RESOLVED: {
+    label: "Resolved",
+    icon: "✅",
+    className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+  },
+  CLOSED: {
+    label: "Closed",
+    icon: "🔒",
+    className: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20"
+  },
+  REOPENED: {
+    label: "Reopened",
+    icon: "🔄",
+    className: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    icon: "🚫",
+    className: "bg-slate-500/10 text-slate-500 dark:text-slate-500 border border-slate-500/20"
+  }
 };
 
-const PRIORITY_STYLE: Record<TicketPriority, { fg: string; icon: string }> = {
-  LOW: { fg: "#0F7A3D", icon: "🟢" },
-  MEDIUM: { fg: "#92650A", icon: "🟡" },
-  HIGH: { fg: "#C2410C", icon: "🟠" },
-  CRITICAL: { fg: "#B42318", icon: "🔴" }
+const PRIORITY_CONFIG: Record<
+  TicketPriority,
+  { label: string; icon: string; className: string }
+> = {
+  LOW: {
+    label: "Low",
+    icon: "🟢",
+    className: "text-emerald-600 dark:text-emerald-400"
+  },
+  MEDIUM: {
+    label: "Medium",
+    icon: "🟡",
+    className: "text-amber-600 dark:text-amber-400"
+  },
+  HIGH: {
+    label: "High",
+    icon: "🟠",
+    className: "text-orange-600 dark:text-orange-400"
+  },
+  CRITICAL: {
+    label: "Critical",
+    icon: "🔴",
+    className: "text-rose-600 dark:text-rose-400 font-bold animate-pulse"
+  }
 };
 
 export function StatusPill({ status }: { status: TicketStatus }) {
-  const s = STATUS_STYLE[status];
+  const conf = STATUS_CONFIG[status] || STATUS_CONFIG.NEW;
   return (
-    <span className="status-pill" style={{ background: s.bg, color: s.fg }}>
-      {s.icon} {s.label}
+    <span className={`status-pill ${conf.className}`}>
+      <span>{conf.icon}</span>
+      <span>{conf.label}</span>
     </span>
   );
 }
 
 export function PriorityPill({ priority }: { priority: TicketPriority }) {
-  const p = PRIORITY_STYLE[priority];
+  const conf = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.MEDIUM;
   return (
-    <span className="status-pill" style={{ background: "transparent", color: p.fg, padding: 0 }}>
-      {p.icon} {priority.charAt(0) + priority.slice(1).toLowerCase()}
+    <span className={`status-pill bg-transparent p-0 ${conf.className}`}>
+      <span>{conf.icon}</span>
+      <span>{conf.label}</span>
     </span>
   );
 }

@@ -47,32 +47,20 @@ export function DemoRoleSwitcher({ currentRole }: { currentRole?: UserRole }) {
   };
 
   return (
-    <div className="fixed top-2 right-2 z-50 text-xs">
+    <div className="fixed bottom-20 right-3 sm:right-6 z-50 text-xs">
       <div className="relative">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium shadow-sm transition-all border"
-          style={{
-            background: "var(--tg-theme-section-bg-color, #ffffff)",
-            color: "var(--tg-theme-text-color, #111111)",
-            borderColor: "rgba(0,0,0,0.12)"
-          }}
-          title="Switch Telegram Demo Persona"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold shadow-lg transition-all border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:scale-105"
+          title="Switch Demo Persona"
         >
           <span>{roleMeta[role].icon}</span>
-          <span className="hidden sm:inline font-semibold">{roleMeta[role].label}</span>
+          <span className="font-bold">{roleMeta[role].label}</span>
           <span className="opacity-60 text-[10px]">▼</span>
         </button>
 
         {isOpen && (
-          <div
-            className="absolute right-0 mt-1.5 w-56 rounded-2xl p-1.5 shadow-xl border animate-in fade-in"
-            style={{
-              background: "var(--tg-theme-section-bg-color, #ffffff)",
-              borderColor: "rgba(0,0,0,0.1)",
-              color: "var(--tg-theme-text-color, #111111)"
-            }}
-          >
+          <div className="absolute right-0 bottom-full mb-2 w-56 rounded-2xl p-1.5 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white animate-in fade-in">
             <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider uppercase opacity-60">
               Demo Persona Switcher
             </div>
