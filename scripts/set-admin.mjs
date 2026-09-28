@@ -5,10 +5,13 @@ const pool = new Pool({
 });
 
 async function main() {
-  const res = await pool.query(
-    "UPDATE users SET role = 'ADMIN' WHERE telegram_id = '2074368152' OR telegram_id = '10001' RETURNING id, telegram_id, first_name, role"
+  await pool.query(
+    "UPDATE users SET first_name = 'Ezera', last_name = 'Hailu', is_registered = true WHERE telegram_id = '2074368152'"
   );
-  console.log('Promoted users to ADMIN:', res.rows);
+  const res = await pool.query(
+    "SELECT id, first_name, last_name, telegram_username, role, is_registered FROM users WHERE telegram_id = '2074368152'"
+  );
+  console.log('✅ Updated user profile:', res.rows[0]);
   await pool.end();
 }
 
