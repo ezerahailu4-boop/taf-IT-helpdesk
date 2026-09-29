@@ -115,15 +115,30 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
 
     // Try finding the real primary user first
     if (targetRole === "ADMIN") {
+      const { data: ezeraAdmin } = await db
+        .from("users")
+        .select("*")
+        .eq("telegram_username", "Ezrsh_404")
+        .maybeSingle();
+
+      if (ezeraAdmin) return ezeraAdmin as DbUser;
+
       const { data: adminUser } = await db
         .from("users")
         .select("*")
         .eq("role", "ADMIN")
-        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (adminUser) return adminUser as DbUser;
+    } else if (targetRole === "TECHNICIAN") {
+      const { data: tinsuTech } = await db
+        .from("users")
+        .select("*")
+        .eq("telegram_username", "tinsu2025")
+        .maybeSingle();
+
+      if (tinsuTech) return tinsuTech as DbUser;
     }
 
     const { data: user } = await db
