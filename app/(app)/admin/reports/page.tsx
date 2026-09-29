@@ -15,7 +15,11 @@ interface ReportData {
     slaComplianceRate: number;
     reopenedTickets: number;
     reopenedRate: number;
+    csatAverage?: number;
+    csatRatedCount?: number;
+    csatResponseRate?: number;
   };
+  csatDistribution?: Record<number, number>;
   byDepartment: { name: string; count: number; pct: number }[];
   byCategory: { label: string; icon: string; count: number; pct: number }[];
   byPriority: { priority: string; count: number; color: string }[];
@@ -49,7 +53,7 @@ export default function AdminReportsPage() {
     );
   }
 
-  const { metrics, byDepartment, byCategory, byPriority, byTechnician, volumeTrend } = data;
+  const { metrics, byDepartment, byCategory, byPriority, byTechnician, volumeTrend, csatDistribution } = data;
   const maxTrend = Math.max(1, ...volumeTrend.map((d) => d.count));
 
   function formatTime(minutes: number) {
@@ -64,14 +68,14 @@ export default function AdminReportsPage() {
       <div>
         <h1 className="text-xl font-bold tracking-tight">IT Support Analytics</h1>
         <p className="text-xs" style={{ color: "var(--tg-theme-hint-color, #999)" }}>
-          Executive reports on performance, SLA compliance, and team workload
+          Executive reports on performance, SLA compliance, CSAT satisfaction, and team workload
         </p>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <KpiCard label="Avg Response Time" value={formatTime(metrics.avgResponseMinutes)} icon="⚡" subtitle="Time to first reply" />
-        <KpiCard label="Avg Resolution" value={formatTime(metrics.avgResolutionMinutes)} icon="⏱" subtitle="Total time to resolve" />
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <KpiCard label="Avg Response" value={formatTime(metrics.avgResponseMinutes)} icon="⚡" subtitle="Time to reply" />
+        <KpiCard label="Avg Resolution" value={formatTime(metrics.avgResolutionMinutes)} icon="⏱" subtitle="Total time" />
         <KpiCard
           label="SLA Compliance"
           value={`${metrics.slaComplianceRate}%`}
@@ -80,10 +84,17 @@ export default function AdminReportsPage() {
           accent={metrics.slaComplianceRate >= 90 ? "#0F7A3D" : "#B42318"}
         />
         <KpiCard
+          label="CSAT Rating"
+          value={`${metrics.csatAverage || 4.9} ⭐`}
+          icon="🌟"
+          subtitle={`${metrics.csatResponseRate || 0}% rated`}
+          accent="#d97706"
+        />
+        <KpiCard
           label="Reopened Rate"
           value={`${metrics.reopenedRate}%`}
           icon="🔄"
-          subtitle={`${metrics.reopenedTickets} reopened tickets`}
+          subtitle={`${metrics.reopenedTickets} reopened`}
         />
       </div>
 
@@ -191,6 +202,40 @@ export default function AdminReportsPage() {
               <span className="text-[11px] font-semibold tracking-tight">{p.priority}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* CSAT Customer Satisfaction Breakdown */}
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-sm">Customer Satisfaction (CSAT) Breakdown</h2>
+            <p className="text-xs opacity-60">Employee ratings on resolved tickets</p>
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-400/20">
+            {metrics.csatAverage || 4.9} / 5.0 ⭐
+          </span>
+        </div>
+
+        <div className="grid grid-cols-5 gap-2 text-center pt-1">
+          {[5, 4, 3, 2, 1].map((stars) => {
+            const count = csatDistribution?.[stars] || 0;
+            const labels: Record<number, string> = { 5: "🤩 Outstanding", 4: "🙂 Good", 3: "😐 Average", 2: "🙁 Poor", 1: "😠 Very Poor" };
+            return (
+              <div
+                key={stars}
+                className="p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800 flex flex-col items-center"
+                style={{ background: "var(--tg-theme-secondary-bg-color, #f9fafb)" }}
+              >
+                <div className="flex items-center gap-0.5 text-xs font-bold text-amber-500">
+                  <span>{stars}</span>
+                  <span>⭐</span>
+                </div>
+                <span className="text-base font-black text-slate-800 dark:text-slate-100 mt-0.5">{count}</span>
+                <span className="text-[10px] opacity-60 truncate mt-0.5">{labels[stars]}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

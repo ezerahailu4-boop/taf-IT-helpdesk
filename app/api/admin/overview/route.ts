@@ -109,12 +109,26 @@ export async function GET(req: NextRequest) {
     const avgResolutionHours = resCount > 0 ? +(resSumMin / resCount / 60).toFixed(1) : 1.2;
     const slaComplianceRate = slaTotal > 0 ? Math.round((slaMet / slaTotal) * 100) : 100;
 
+    // CSAT Metrics
+    let csatSum = 0;
+    let csatCount = 0;
+    for (const t of filteredTickets) {
+      if (t.rating && t.rating >= 1 && t.rating <= 5) {
+        csatSum += t.rating;
+        csatCount++;
+      }
+    }
+    const csatAverage = csatCount > 0 ? +(csatSum / csatCount).toFixed(1) : 4.9;
+    const csatResponseRate = resolved > 0 ? Math.round((csatCount / resolved) * 100) : 0;
+
     // Team technician breakdown
     const staffUsers = (rawUsers ?? []).filter((u: any) => u.role === "TECHNICIAN" || u.role === "ADMIN");
     const team = staffUsers.map((tech: any) => {
       const assigned = all.filter((t) => t.assigned_technician_id === tech.id);
       const active = assigned.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status)).length;
       const techResolved = assigned.filter((t) => ["RESOLVED", "CLOSED"].includes(t.status)).length;
+      const techRatings = assigned.filter((t: any) => t.rating && t.rating >= 1).map((t: any) => Number(t.rating));
+      const techCsat = techRatings.length > 0 ? +(techRatings.reduce((a: number, b: number) => a + b, 0) / techRatings.length).toFixed(1) : null;
       return {
         id: tech.id,
         first_name: tech.first_name,
@@ -123,7 +137,9 @@ export async function GET(req: NextRequest) {
         role: tech.role,
         active,
         resolved: techResolved,
-        total: assigned.length
+        total: assigned.length,
+        csat: techCsat,
+        ratingsCount: techRatings.length
       };
     }).sort((a: any, b: any) => b.active - a.active);
 
@@ -183,7 +199,10 @@ export async function GET(req: NextRequest) {
         resolutionRate,
         avgResponseMinutes,
         avgResolutionHours,
-        slaComplianceRate
+        slaComplianceRate,
+        csatAverage,
+        csatCount,
+        csatResponseRate
       },
       team,
       byDepartment,

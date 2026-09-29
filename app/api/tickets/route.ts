@@ -116,6 +116,16 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const ticketNumber = await generateTicketNumber(db);
 
+    // Auto-route to primary triage technician (@tinsu2025 / ID 6319536255)
+    const { data: dispatcher } = await db
+      .from("users")
+      .select("id, telegram_id, first_name, last_name, telegram_username")
+      .or("telegram_username.ilike.tinsu2025,telegram_id.eq.6319536255")
+      .maybeSingle();
+
+    const assignedTechId = dispatcher?.id ?? null;
+    const initialStatus = assignedTechId ? "ASSIGNED" : "NEW";
+
     const { data: ticket, error } = await db
       .from("tickets")
       .insert({
@@ -129,7 +139,8 @@ export async function POST(req: NextRequest) {
         location_id: body.locationId ?? user.location_id,
         asset_id: body.assetId ?? null,
         priority: body.priority,
-        status: "NEW",
+        status: initialStatus,
+        assigned_technician_id: assignedTechId,
         sla_policy_id: slaPolicy.id,
         response_due_at: addMinutes(now, slaPolicy.response_minutes).toISOString(),
         resolution_due_at: addMinutes(now, slaPolicy.resolution_minutes).toISOString()
@@ -139,7 +150,13 @@ export async function POST(req: NextRequest) {
 
     if (error) throw new Error(error.message);
 
-    await recordStatusChange(db, { ticketId: ticket.id, changedBy: user.id, from: null, to: "NEW" });
+    await recordStatusChange(db, {
+      ticketId: ticket.id,
+      changedBy: user.id,
+      from: null,
+      to: initialStatus,
+      note: assignedTechId ? "Assigned to @tinsu2025 for primary triage" : undefined
+    });
     await writeAudit(db, { actorId: user.id, action: "CREATE", objectType: "ticket", objectId: ticket.id, newValue: ticket });
 
     const [{ data: dept }, { data: loc }] = await Promise.all([

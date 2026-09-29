@@ -47,6 +47,9 @@ export interface DbTicket {
   closed_at: string | null;
   closed_by: string | null;
   reopened_count: number;
+  rating?: number | null;
+  rating_comment?: string | null;
+  rated_at?: string | null;
   created_at: string;
   updated_at: string;
 }

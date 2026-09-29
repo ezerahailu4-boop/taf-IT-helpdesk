@@ -43,19 +43,40 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
 
     if (fetchErr) throw new Error(fetchErr.message);
 
-    if (existing) {
+    const username = (tgUser.username || "").toLowerCase();
+    const isTinsu = username === "tinsu2025" || String(tgUser.id) === "6319536255";
+    const isDesignatedAdmin = String(tgUser.id) === "883942515" || String(tgUser.id) === "2074368152";
+
+    let matchedUser = existing;
+    if (!matchedUser && tgUser.username) {
+      const { data: byUsername } = await db.from("users").select("*").ilike("telegram_username", tgUser.username).maybeSingle();
+      if (byUsername) matchedUser = byUsername;
+    }
+
+    if (matchedUser) {
+      const updateData: Record<string, unknown> = {
+        telegram_id: tgUser.id,
+        telegram_username: tgUser.username ?? matchedUser.telegram_username,
+        first_name: tgUser.first_name ?? matchedUser.first_name,
+        last_name: tgUser.last_name ?? matchedUser.last_name,
+        photo_url: tgUser.photo_url ?? matchedUser.photo_url,
+        language_code: tgUser.language_code ?? matchedUser.language_code,
+        last_active_at: new Date().toISOString()
+      };
+
+      if (isDesignatedAdmin && matchedUser.role !== "ADMIN") {
+        updateData.role = "ADMIN";
+        matchedUser.role = "ADMIN";
+      } else if (isTinsu && matchedUser.role === "EMPLOYEE") {
+        updateData.role = "TECHNICIAN";
+        matchedUser.role = "TECHNICIAN";
+      }
+
       await db
         .from("users")
-        .update({
-          telegram_username: tgUser.username ?? existing.telegram_username,
-          first_name: tgUser.first_name ?? existing.first_name,
-          last_name: tgUser.last_name ?? existing.last_name,
-          photo_url: tgUser.photo_url ?? existing.photo_url,
-          language_code: tgUser.language_code ?? existing.language_code,
-          last_active_at: new Date().toISOString()
-        })
-        .eq("id", existing.id);
-      return { ...existing, telegram_username: tgUser.username ?? existing.telegram_username } as DbUser;
+        .update(updateData)
+        .eq("id", matchedUser.id);
+      return { ...matchedUser, ...updateData } as DbUser;
     }
 
     const { data: created, error: insertErr } = await db
@@ -67,7 +88,8 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
         last_name: tgUser.last_name,
         photo_url: tgUser.photo_url,
         language_code: tgUser.language_code,
-        role: "EMPLOYEE"
+        role: isDesignatedAdmin ? "ADMIN" : isTinsu ? "TECHNICIAN" : "EMPLOYEE",
+        is_registered: isDesignatedAdmin || isTinsu ? true : false
       })
       .select("*")
       .single();

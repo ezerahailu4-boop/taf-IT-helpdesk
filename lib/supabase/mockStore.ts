@@ -278,6 +278,22 @@ function seedData(): MockDbStore {
         is_active: true,
         created_at: oneDayAgo,
         last_active_at: isoNow
+      },
+      {
+        id: "user-admin-adoni",
+        telegram_id: 883942515,
+        telegram_username: "not_adonay",
+        first_name: "Adoni",
+        last_name: "",
+        photo_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+        phone: "+1 555-0106",
+        role: "ADMIN",
+        department_id: deptIT,
+        location_id: locHeadOffice,
+        support_group_id: sgNetwork,
+        is_active: true,
+        created_at: oneDayAgo,
+        last_active_at: isoNow
       }
     ],
     departments: [

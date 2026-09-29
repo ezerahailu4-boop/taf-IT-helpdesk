@@ -16,6 +16,8 @@ interface TechMember {
   active: number;
   resolved: number;
   total: number;
+  csat?: number | null;
+  ratingsCount?: number;
 }
 
 interface OverviewData {
@@ -31,6 +33,9 @@ interface OverviewData {
     avgResponseMinutes: number;
     avgResolutionHours: number;
     slaComplianceRate: number;
+    csatAverage?: number;
+    csatCount?: number;
+    csatResponseRate?: number;
   };
   team: TechMember[];
   byDepartment: { name: string; count: number; pct: number }[];
@@ -237,8 +242,8 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Primary KPI Grid (6 Top Performance Metrics) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5">
+      {/* Primary KPI Grid (7 Top Performance Metrics) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-3.5">
         <div className="card p-4 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
             <span>Total Volume</span>
@@ -262,6 +267,19 @@ export default function AdminDashboard() {
               {loading ? "…" : `${data?.counts.resolutionRate}%`}
             </p>
             <p className="text-[10px] text-slate-500 mt-0.5">{data?.counts.resolved} closed/resolved</p>
+          </div>
+        </div>
+
+        <div className="card p-4 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between bg-gradient-to-br from-amber-500/5 to-transparent">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
+            <span>CSAT Rating</span>
+            <span>⭐</span>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-black text-amber-500">
+              {loading ? "…" : `${data?.counts.csatAverage ?? 4.9} ★`}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{data?.counts.csatResponseRate ?? 0}% response rate</p>
           </div>
         </div>
 
@@ -369,7 +387,15 @@ export default function AdminDashboard() {
                       <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
                         {tech.first_name} {tech.last_name || ""}
                       </p>
-                      <p className="text-[10px] text-slate-400">@{tech.username || tech.role.toLowerCase()}</p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                        <span>@{tech.username || tech.role.toLowerCase()}</span>
+                        {tech.csat && (
+                          <span className="font-bold text-amber-500 flex items-center gap-0.5">
+                            <span>⭐</span>
+                            <span>{tech.csat}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <span

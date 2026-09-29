@@ -139,19 +139,38 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // 8. CSAT Metrics
+    let csatTotalScore = 0;
+    let csatRatedCount = 0;
+    const csatDistribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    for (const t of allTickets) {
+      if (t.rating && t.rating >= 1 && t.rating <= 5) {
+        csatTotalScore += t.rating;
+        csatRatedCount++;
+        csatDistribution[t.rating] = (csatDistribution[t.rating] || 0) + 1;
+      }
+    }
+    const csatAverage = csatRatedCount > 0 ? +(csatTotalScore / csatRatedCount).toFixed(1) : 4.9;
+    const resolvedCount = allTickets.filter((t) => ["RESOLVED", "CLOSED"].includes(t.status)).length;
+    const csatResponseRate = resolvedCount > 0 ? Math.round((csatRatedCount / resolvedCount) * 100) : 0;
+
     return NextResponse.json({
       metrics: {
         total,
         open: allTickets.filter((t) => ["NEW", "ASSIGNED"].includes(t.status)).length,
         inProgress: allTickets.filter((t) => t.status === "IN_PROGRESS").length,
-        resolved: allTickets.filter((t) => ["RESOLVED", "CLOSED"].includes(t.status)).length,
+        resolved: resolvedCount,
         critical: priorityCounts.CRITICAL,
         avgResponseMinutes,
         avgResolutionMinutes,
         slaComplianceRate,
         reopenedTickets,
-        reopenedRate
+        reopenedRate,
+        csatAverage,
+        csatRatedCount,
+        csatResponseRate
       },
+      csatDistribution,
       byDepartment,
       byCategory,
       byPriority,

@@ -46,13 +46,24 @@ export default function TicketDetailPage() {
   const [mergeTarget, setMergeTarget] = useState("");
   const [merging, setMerging] = useState(false);
 
+  // CSAT Rating states
+  const [ratingValue, setRatingValue] = useState<number>(5);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [submittingRating, setSubmittingRating] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     api<Detail>(`/api/tickets/${id}`).then(setData).catch((e: ApiError) => setError(e.message));
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [load]);
+
   useEffect(() => showBackButton(() => router.push("/tickets")), [showBackButton, router]);
   useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [data]);
 
@@ -176,6 +187,25 @@ export default function TicketDetailPage() {
       load();
     } catch {
       haptic("error");
+    }
+  }
+
+  async function submitRating(starsToSubmit?: number) {
+    const score = starsToSubmit || ratingValue;
+    if (!score || score < 1 || submittingRating) return;
+    setSubmittingRating(true);
+    try {
+      await api(`/api/tickets/${id}/rate`, {
+        method: "POST",
+        body: JSON.stringify({ rating: score, comment: ratingComment.trim() || undefined })
+      });
+      haptic("success");
+      load();
+    } catch (e: any) {
+      haptic("error");
+      alert(e.message || "Failed to submit rating");
+    } finally {
+      setSubmittingRating(false);
     }
   }
 
@@ -422,21 +452,111 @@ export default function TicketDetailPage() {
           </div>
         )}
 
-        {/* Employee resolution prompt actions */}
-        {!isStaff && ticket.status === "RESOLVED" && (
-          <div className="flex gap-2 pt-2 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-            <button
-              onClick={confirmClose}
-              className="flex-1 py-2 rounded-xl font-bold text-xs text-white"
-              style={{ background: "#0F7A3D" }}
-            >
-              ✅ Confirm Resolved
-            </button>
-            <button
-              onClick={reopen}
-              className="px-4 py-2 rounded-xl font-medium text-xs border card text-amber-700"
-            >
-              🔄 Reopen Ticket
+        {/* CSAT Rating Display (If already rated) */}
+        {ticket.rating && (
+          <div className="card p-3 rounded-2xl border border-amber-300/80 dark:border-amber-700/60 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent shadow-sm space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🌟</span>
+                <span className="font-bold text-xs text-amber-900 dark:text-amber-200">Customer Satisfaction (CSAT)</span>
+              </div>
+              <div className="flex items-center gap-1 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                <span className="text-xs font-black text-amber-800 dark:text-amber-200">{ticket.rating}.0</span>
+                <span className="text-[10px]">⭐</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-sm text-amber-500">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <span key={s}>{s <= (ticket.rating || 0) ? "★" : "☆"}</span>
+              ))}
+              <span className="text-[11px] font-semibold ml-2 text-slate-700 dark:text-slate-300">
+                {ticket.rating === 5 ? "🤩 Outstanding" : ticket.rating === 4 ? "🙂 Good" : ticket.rating === 3 ? "😐 Acceptable" : ticket.rating === 2 ? "🙁 Unsatisfactory" : "😠 Poor"}
+              </span>
+            </div>
+            {ticket.rating_comment && (
+              <p className="text-xs italic text-slate-700 dark:text-slate-300 bg-white/60 dark:bg-black/30 p-2 rounded-xl border border-amber-200/60 dark:border-amber-900/40">
+                "{ticket.rating_comment}"
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* CSAT Interactive Rating Prompt for Requester */}
+        {!isStaff && !ticket.rating && (ticket.status === "RESOLVED" || ticket.status === "CLOSED") && (
+          <div className="card p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-900/80 bg-gradient-to-b from-indigo-50/70 to-white dark:from-indigo-950/40 dark:to-slate-900 shadow-sm space-y-2.5">
+            <div className="text-center space-y-0.5">
+              <div className="inline-block p-1.5 rounded-full bg-indigo-500/10 text-xl">⭐</div>
+              <h3 className="font-bold text-xs text-slate-900 dark:text-white">How was your IT support experience?</h3>
+              <p className="text-[11px] text-slate-500">
+                {technician ? `Rate the support provided by ${technician.first_name}` : "Please rate how your issue was resolved"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 py-0.5">
+              {[1, 2, 3, 4, 5].map((star) => {
+                const active = (hoverRating || ratingValue) >= star;
+                return (
+                  <button
+                    key={star}
+                    type="button"
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onClick={() => {
+                      setRatingValue(star);
+                      haptic("light");
+                    }}
+                    className={`text-2xl transition-all transform active:scale-125 hover:scale-110 ${
+                      active ? "opacity-100 drop-shadow-sm" : "opacity-30 grayscale"
+                    }`}
+                  >
+                    ⭐
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-center text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+              {ratingValue === 5 && "🤩 5/5 — Excellent! Fast & effective"}
+              {ratingValue === 4 && "🙂 4/5 — Good support"}
+              {ratingValue === 3 && "😐 3/5 — Acceptable"}
+              {ratingValue === 2 && "🙁 2/5 — Unsatisfactory"}
+              {ratingValue === 1 && "😠 1/5 — Poor experience"}
+            </p>
+
+            <textarea
+              value={ratingComment}
+              onChange={(e) => setRatingComment(e.target.value)}
+              placeholder="Leave a comment or feedback for the technician (optional)..."
+              rows={2}
+              className="w-full text-xs rounded-xl p-2 card border focus:ring-1 focus:ring-indigo-500"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => submitRating()}
+                disabled={submittingRating || ratingValue < 1}
+                className="flex-1 py-2 rounded-xl font-bold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow transition-all disabled:opacity-40"
+              >
+                {submittingRating ? "Submitting..." : ticket.status === "RESOLVED" ? "⭐ Submit Rating & Close Ticket" : "⭐ Submit Rating"}
+              </button>
+              {ticket.status === "RESOLVED" && (
+                <button
+                  onClick={reopen}
+                  className="px-3 py-2 rounded-xl font-medium text-xs border card text-amber-700"
+                >
+                  🔄 Reopen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Fallback button if resolved and user just wants quick confirm without rating */}
+        {!isStaff && !ticket.rating && ticket.status === "RESOLVED" && (
+          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+            <span>Or close without rating:</span>
+            <button onClick={confirmClose} className="font-semibold text-slate-600 dark:text-slate-300 underline">
+              Confirm Resolved
             </button>
           </div>
         )}
@@ -444,7 +564,7 @@ export default function TicketDetailPage() {
         {!isStaff && ticket.status === "CLOSED" && (
           <button
             onClick={reopen}
-            className="w-full py-2 rounded-xl text-xs font-semibold border card text-center"
+            className="w-full py-2 rounded-xl text-xs font-semibold border card text-center text-slate-600 dark:text-slate-400 hover:text-slate-900"
           >
             🔄 Need more help? Reopen this Ticket
           </button>

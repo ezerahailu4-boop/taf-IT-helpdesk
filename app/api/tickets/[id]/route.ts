@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ticket.asset_id
         ? db.from("assets").select("id, asset_tag, type, brand, model").eq("id", ticket.asset_id).single()
         : Promise.resolve({ data: null }),
-      isStaff ? db.from("users").select("id, first_name, last_name").eq("role", "TECHNICIAN").eq("is_active", true) : Promise.resolve({ data: [] }),
+      isStaff ? db.from("users").select("id, first_name, last_name, role").in("role", ["TECHNICIAN", "ADMIN"]).eq("is_active", true) : Promise.resolve({ data: [] }),
       isStaff ? db.from("categories").select("id, key, label, icon").eq("is_active", true) : Promise.resolve({ data: [] })
     ]);
 

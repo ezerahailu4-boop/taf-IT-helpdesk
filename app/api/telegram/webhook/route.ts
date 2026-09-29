@@ -34,13 +34,50 @@ export async function POST(req: NextRequest) {
 }
 
 async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from: any) {
-  const { data: existing } = await db.from("users").select("*").eq("telegram_id", from.id).maybeSingle();
+  const username = (from.username || "").toLowerCase();
+  const isTinsu = username === "tinsu2025" || String(from.id) === "6319536255";
+  const isDesignatedAdmin = String(from.id) === "883942515" || String(from.id) === "2074368152";
+
+  let { data: existing } = await db.from("users").select("*").eq("telegram_id", from.id).maybeSingle();
+
+  // If not found by telegram_id, check if pre-seeded by username (like @tinsu2025)
+  if (!existing && from.username) {
+    const { data: byUsername } = await db.from("users").select("*").ilike("telegram_username", from.username).maybeSingle();
+    if (byUsername) {
+      existing = byUsername;
+      await db.from("users").update({
+        telegram_id: from.id,
+        first_name: from.first_name || existing.first_name,
+        last_name: from.last_name || existing.last_name,
+        role: isTinsu ? "TECHNICIAN" : existing.role,
+        is_registered: true,
+        is_active: true,
+        last_active_at: new Date().toISOString()
+      }).eq("id", existing.id);
+      existing.telegram_id = from.id;
+      return existing;
+    }
+  }
+
   if (existing) {
+    const updates: Record<string, unknown> = {};
     if (from.username && from.username !== existing.telegram_username) {
-      await db.from("users").update({ telegram_username: from.username }).eq("id", existing.id);
+      updates.telegram_username = from.username;
+    }
+    if (isTinsu && existing.role === "EMPLOYEE") {
+      updates.role = "TECHNICIAN";
+      existing.role = "TECHNICIAN";
+    }
+    if (isDesignatedAdmin && existing.role !== "ADMIN") {
+      updates.role = "ADMIN";
+      existing.role = "ADMIN";
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.from("users").update(updates).eq("id", existing.id);
     }
     return existing;
   }
+
   const { data: created } = await db
     .from("users")
     .insert({
@@ -48,8 +85,8 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
       telegram_username: from.username,
       first_name: from.first_name,
       last_name: from.last_name,
-      role: "EMPLOYEE",
-      is_registered: false
+      role: isDesignatedAdmin ? "ADMIN" : isTinsu ? "TECHNICIAN" : "EMPLOYEE",
+      is_registered: isDesignatedAdmin || isTinsu ? true : false
     })
     .select("*")
     .single();
@@ -144,16 +181,33 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || from.first_name || "Employee";
 
   if (text.startsWith("/start")) {
+    const isStaff = user?.role === "ADMIN" || user?.role === "TECHNICIAN";
+    const buttons =
+      user?.role === "ADMIN"
+        ? [
+            [miniAppButton("🛡️ Admin Command Center", "/admin")],
+            [miniAppButton("👨‍💻 Technician Workbench", "/tech")],
+            [miniAppButton("🎫 Ticket Queue", "/tickets")],
+            [miniAppButton("📚 Help Center", "/help")]
+          ]
+        : user?.role === "TECHNICIAN"
+        ? [
+            [miniAppButton("👨‍💻 Technician Workbench", "/tech")],
+            [miniAppButton("🎫 My Queue", "/tickets")],
+            [miniAppButton("📚 Help Center", "/help")]
+          ]
+        : [
+            [miniAppButton("🛠 Open IT Helpdesk", "/home")],
+            [miniAppButton("🎫 My Tickets", "/tickets")],
+            [miniAppButton("📚 Help Center", "/help")]
+          ];
+
     await sendMessage(
       chatId,
-      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>! How can we help you today?\n\n<i>(To update your name anytime, send <code>/name Your Name</code>)</i>`,
+      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>!${isStaff ? ` (Role: <b>${user.role}</b>)` : ""}\nHow can we help you today?\n\n<i>(To update your name anytime, send <code>/name Your Name</code>)</i>`,
       {
         parseMode: "HTML",
-        buttons: [
-          [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
-          [miniAppButton("🎫 My Tickets", "/tickets")],
-          [miniAppButton("📚 Help Center", "/help")]
-        ]
+        buttons
       }
     );
     return;
@@ -220,8 +274,96 @@ async function handleCallback(db: ReturnType<typeof supabaseAdmin>, cb: any) {
       await answerCallbackQuery(cb.id, "Ticket assigned to you ✅");
       break;
     }
+    case "reassign_menu":
     case "assign": {
-      await answerCallbackQuery(cb.id, "Open the app to choose a technician");
+      if (user.role === "EMPLOYEE") {
+        await answerCallbackQuery(cb.id, "Only technicians can reassign tickets");
+        return;
+      }
+
+      const { data: staffList } = await db
+        .from("users")
+        .select("id, first_name, last_name, telegram_username, role")
+        .in("role", ["TECHNICIAN", "ADMIN"])
+        .eq("is_active", true);
+
+      const candidates = (staffList ?? []).filter((s: any) => s.id !== user.id);
+
+      if (candidates.length === 0) {
+        await answerCallbackQuery(cb.id, "No other technicians found to reassign to");
+        return;
+      }
+
+      const techButtons = candidates.map((s: any) => [
+        {
+          text: `👨‍💻 ${s.first_name} ${s.last_name || ""} (@${s.telegram_username || "tech"})`,
+          callback_data: `reassign_to:${ticket.id}:${s.id}`
+        }
+      ]);
+
+      await sendMessage(
+        cb.from.id,
+        `👤 <b>Reassign Ticket ${ticket.ticket_number}</b>\nTap a technician to assign this ticket to:`,
+        {
+          buttons: techButtons,
+          parseMode: "HTML"
+        }
+      );
+      await answerCallbackQuery(cb.id, "Choose technician from list");
+      break;
+    }
+    case "reassign_to": {
+      const [, tId, targetTechId] = String(cb.data ?? "").split(":");
+      if (user.role === "EMPLOYEE") {
+        await answerCallbackQuery(cb.id, "Only technicians can reassign tickets");
+        return;
+      }
+
+      const { data: targetTech } = await db.from("users").select("*").eq("id", targetTechId).single();
+      if (!targetTech) {
+        await answerCallbackQuery(cb.id, "Selected technician not found");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { data: updated } = await db
+        .from("tickets")
+        .update({
+          assigned_technician_id: targetTech.id,
+          status: "ASSIGNED",
+          updated_at: now
+        })
+        .eq("id", ticket.id)
+        .select("*")
+        .single();
+
+      await recordStatusChange(db, {
+        ticketId: ticket.id,
+        changedBy: user.id,
+        from: ticket.status,
+        to: "ASSIGNED",
+        note: `Reassigned by @${user.telegram_username || user.first_name} to ${targetTech.first_name}`
+      });
+
+      await writeAudit(db, {
+        actorId: user.id,
+        action: "ASSIGN",
+        objectType: "ticket",
+        objectId: ticket.id,
+        newValue: { assigned_technician_id: targetTech.id }
+      });
+
+      const { data: requester } = await db.from("users").select("*").eq("id", ticket.requester_id).single();
+      if (targetTech.telegram_id && requester && updated) {
+        await notifyTicketAssigned(db, updated, requester, targetTech);
+      }
+
+      await answerCallbackQuery(cb.id, `Reassigned to ${targetTech.first_name} ✅`);
+      await sendMessage(
+        cb.from.id,
+        `✅ <b>Ticket ${ticket.ticket_number} Reassigned!</b>\nSuccessfully handed off to <b>${targetTech.first_name} ${targetTech.last_name || ""}</b> (@${targetTech.telegram_username || "tech"}).`,
+        { parseMode: "HTML" }
+      );
       break;
     }
     case "confirm": {

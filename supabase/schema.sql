@@ -181,6 +181,9 @@ create table if not exists tickets (
   closed_at timestamptz,
   closed_by uuid references users(id),
   reopened_count int not null default 0,
+  rating int check (rating >= 1 and rating <= 5),
+  rating_comment text,
+  rated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -212,6 +212,9 @@ async function migrate() {
         closed_at timestamptz,
         closed_by uuid REFERENCES users(id),
         reopened_count int NOT NULL DEFAULT 0,
+        rating int CHECK (rating >= 1 AND rating <= 5),
+        rating_comment text,
+        rated_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -425,6 +428,13 @@ async function migrate() {
              (SELECT id FROM departments WHERE name='IT' LIMIT 1),
              (SELECT id FROM locations WHERE name='Head Office' LIMIT 1)
       WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1005);
+
+      INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
+      SELECT 883942515, 'not_adonay', 'Adoni', '', 'ADMIN',
+             (SELECT id FROM departments WHERE name='IT' LIMIT 1),
+             (SELECT id FROM locations WHERE name='Head Office' LIMIT 1),
+             (SELECT id FROM support_groups WHERE name='Network Team' LIMIT 1)
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 883942515);
     `);
 
     // 12. Seed Assets

@@ -19,9 +19,42 @@ export async function notifyNewTicketToItGroup(
   departmentName: string,
   locationName: string
 ) {
+  // 1. Notify primary dispatcher (@tinsu2025 / ID 6319536255)
+  const { data: dispatcher } = await db
+    .from("users")
+    .select("*")
+    .or("telegram_username.ilike.tinsu2025,telegram_id.eq.6319536255")
+    .maybeSingle();
+
+  const directDispatcherText =
+    `📥 <b>NEW TICKET ASSIGNED TO YOU FOR TRIAGE</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `👤 <b>Requester:</b> <b>${requester.first_name ?? "Employee"} ${requester.last_name ?? ""}</b>${requester.telegram_username ? ` (@${requester.telegram_username})` : ""}\n` +
+    (requester.phone ? `📞 <b>Phone:</b> ${requester.phone}\n` : "") +
+    (departmentName && departmentName !== "—" ? `🏢 <b>Department:</b> ${departmentName}\n` : "") +
+    `📂 <b>Category:</b> ${categoryLabel}\n` +
+    `${priorityEmoji[ticket.priority] || "🟡"} <b>Priority:</b> ${ticket.priority}\n` +
+    `📝 <b>Issue:</b> ${ticket.subject}\n\n` +
+    `<i>You are assigned as primary triage. If you cannot resolve this directly, tap "Reassign" below to hand off to another technician.</i>`;
+
+  const dispatcherButtons = [
+    [miniAppButton("🛠 Open & Handle Ticket", `/tickets/${ticket.id}`)],
+    [{ text: "👤 Reassign to Tech", callback_data: `reassign_menu:${ticket.id}` }]
+  ];
+
+  if (dispatcher?.telegram_id && Number(dispatcher.telegram_id) > 100000 && Number(dispatcher.telegram_id) !== 2025001) {
+    await sendMessage(dispatcher.telegram_id, directDispatcherText, {
+      buttons: dispatcherButtons,
+      parseMode: "HTML"
+    });
+    await log(db, dispatcher.id, ticket.id, "DISPATCH_DIRECT", "Ticket dispatched to primary triage", directDispatcherText);
+  }
+
+  // 2. Post to IT Support Group if configured
   const { data: settings } = await db.from("system_settings").select("value").eq("key", "it_group_chat_id").single();
   const chatId = settings?.value;
-  if (!chatId) return; // not configured yet — admin sets this in Settings
+  if (!chatId) return;
 
   const text =
     `🚨 <b>NEW IT TICKET</b>\n` +
@@ -30,14 +63,16 @@ export async function notifyNewTicketToItGroup(
     (requester.phone ? `📞 ${requester.phone}\n` : "") +
     (departmentName && departmentName !== "—" ? `🏢 ${departmentName}\n` : "") +
     `📂 ${categoryLabel}\n` +
-    `${priorityEmoji[ticket.priority]} ${ticket.priority}\n` +
-    `📝 ${ticket.subject}`;
+    `${priorityEmoji[ticket.priority] || "🟡"} ${ticket.priority}\n` +
+    `📝 ${ticket.subject}\n` +
+    `👨‍💻 <b>Assigned To:</b> @tinsu2025 (Primary Triage)`;
 
   await sendMessage(chatId, text, {
     buttons: [
       [miniAppButton("👁 View Ticket", `/tickets/${ticket.id}`)],
-      [{ text: "🙋 Take Ticket", callback_data: `take:${ticket.id}` }, { text: "👤 Assign", callback_data: `assign:${ticket.id}` }]
-    ]
+      [{ text: "👤 Reassign to Tech", callback_data: `reassign_menu:${ticket.id}` }]
+    ],
+    parseMode: "HTML"
   });
 }
 
@@ -107,11 +142,11 @@ export async function notifyStatusChange(db: SupabaseClient, ticket: DbTicket, r
 
 export async function notifyResolved(db: SupabaseClient, ticket: DbTicket, requester: DbUser, resolutionNote: string) {
   const text =
-    `✅ <b>IT Ticket Resolved</b>\n${ticket.ticket_number}\n\nYour issue has been resolved.\n\nResolution:\n${resolutionNote}`;
+    `✅ <b>IT Ticket Resolved</b>\n${ticket.ticket_number}\n\nYour issue has been resolved.\n\nResolution:\n${resolutionNote}\n\n⭐ <i>Please take a moment to rate your support experience.</i>`;
   await sendMessage(requester.telegram_id, text, {
     buttons: [
-      [{ text: "✅ Confirm Resolved", callback_data: `confirm:${ticket.id}` }, { text: "🔄 Reopen Ticket", callback_data: `reopen:${ticket.id}` }],
-      [miniAppButton("Open in App", `/tickets/${ticket.id}`)]
+      [miniAppButton("⭐ Rate & Close Ticket", `/tickets/${ticket.id}`)],
+      [{ text: "✅ Confirm Resolved", callback_data: `confirm:${ticket.id}` }, { text: "🔄 Reopen Ticket", callback_data: `reopen:${ticket.id}` }]
     ]
   });
   await log(db, requester.id, ticket.id, "TICKET_RESOLVED", "Ticket resolved", text);
@@ -152,3 +187,32 @@ export async function notifySlaBreach(db: SupabaseClient, ticket: DbTicket, tech
     });
   }
 }
+
+export async function notifyTicketRated(
+  db: SupabaseClient,
+  ticket: DbTicket,
+  rating: number,
+  comment: string | null,
+  requesterName: string,
+  technician: DbUser
+) {
+  if (!technician?.telegram_id) return;
+  const stars = "⭐".repeat(Math.max(1, Math.min(5, rating)));
+  let text =
+    `🌟 <b>CSAT Support Rating Received!</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `⭐ <b>Rating:</b> ${stars} (<b>${rating}/5</b>)\n` +
+    `👤 <b>Requester:</b> ${requesterName}\n`;
+  if (comment) {
+    text += `💬 <b>Feedback:</b> <i>"${comment}"</i>\n`;
+  }
+  text += `\nGreat work keeping our users supported! 🚀`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [[miniAppButton("👁 View Ticket", `/tickets/${ticket.id}`)]],
+    parseMode: "HTML"
+  });
+  await log(db, technician.id, ticket.id, "TICKET_RATED", "Ticket rated", text);
+}
+
