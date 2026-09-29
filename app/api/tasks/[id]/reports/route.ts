@@ -49,13 +49,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         progress: finalProgress,
         status: finalStatus
       })
-      .select(`
-        *,
-        technician:users!project_task_reports_technician_id_fkey(id, first_name, last_name, telegram_username, photo_url)
-      `)
+      .select("*")
       .single();
 
     if (reportErr) throw new Error(reportErr.message);
+
+    const enrichedReport = {
+      ...report,
+      technician: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        telegram_username: user.telegram_username,
+        photo_url: user.photo_url
+      }
+    };
 
     // 3. Update task
     const taskUpdates: Record<string, unknown> = {
@@ -81,7 +89,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // 4. Notify Admin(s) via Telegram
     await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, user, body.reportText.trim(), isCompleted);
 
-    return NextResponse.json({ report, task: updatedTask }, { status: 201 });
+    return NextResponse.json({ report: enrichedReport, task: updatedTask }, { status: 201 });
   } catch (err) {
     return errorResponse(err);
   }

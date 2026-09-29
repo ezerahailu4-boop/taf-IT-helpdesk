@@ -29,11 +29,7 @@ export async function GET(req: NextRequest) {
 
     let query = db
       .from("project_tasks")
-      .select(`
-        *,
-        assigned_to:users!project_tasks_assigned_to_id_fkey(id, first_name, last_name, telegram_username, photo_url, role),
-        created_by:users!project_tasks_created_by_id_fkey(id, first_name, last_name, telegram_username)
-      `)
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (statusFilter && statusFilter !== "ALL") {
@@ -44,24 +40,39 @@ export async function GET(req: NextRequest) {
       query = query.eq("assigned_to_id", techIdFilter);
     }
 
-    const { data: tasks, error } = await query;
+    const { data: rawTasks, error } = await query;
     if (error) throw new Error(error.message);
+
+    // Fetch users for relations and technician dropdown
+    const { data: rawUsers } = await db.from("users").select("*");
+    const usersMap = new Map((rawUsers ?? []).map((u: any) => [u.id, u]));
+
+    const tasks = (rawTasks ?? []).map((t: any) => ({
+      ...t,
+      assigned_to: t.assigned_to_id ? usersMap.get(t.assigned_to_id) || null : null,
+      created_by: t.created_by_id ? usersMap.get(t.created_by_id) || null : null
+    }));
 
     // Calculate metrics
     const now = new Date().getTime();
-    const total = tasks?.length ?? 0;
-    const completed = tasks?.filter((t: any) => t.status === "COMPLETED").length ?? 0;
-    const inProgress = tasks?.filter((t: any) => t.status === "IN_PROGRESS").length ?? 0;
-    const pending = tasks?.filter((t: any) => t.status === "PENDING").length ?? 0;
-    const overdue = tasks?.filter((t: any) => t.status !== "COMPLETED" && new Date(t.deadline).getTime() < now).length ?? 0;
+    const total = tasks.length;
+    const completed = tasks.filter((t: any) => t.status === "COMPLETED").length;
+    const inProgress = tasks.filter((t: any) => t.status === "IN_PROGRESS").length;
+    const pending = tasks.filter((t: any) => t.status === "PENDING").length;
+    const overdue = tasks.filter((t: any) => t.status !== "COMPLETED" && new Date(t.deadline).getTime() < now).length;
 
-    // Fetch technicians list for assignment dropdown
-    const { data: technicians } = await db
-      .from("users")
-      .select("id, first_name, last_name, telegram_username, photo_url, role")
-      .in("role", ["TECHNICIAN", "ADMIN"])
-      .eq("is_active", true)
-      .order("first_name", { ascending: true });
+    // Filter technicians list for assignment dropdown
+    const technicians = (rawUsers ?? [])
+      .filter((u: any) => (u.role === "TECHNICIAN" || u.role === "ADMIN") && u.is_active !== false)
+      .map((u: any) => ({
+        id: u.id,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        telegram_username: u.telegram_username,
+        photo_url: u.photo_url,
+        role: u.role
+      }))
+      .sort((a: any, b: any) => (a.first_name || "").localeCompare(b.first_name || ""));
 
     return NextResponse.json({
       tasks: tasks ?? [],

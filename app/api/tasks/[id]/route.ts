@@ -28,11 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: task, error } = await db
       .from("project_tasks")
-      .select(`
-        *,
-        assigned_to:users!project_tasks_assigned_to_id_fkey(id, first_name, last_name, telegram_username, photo_url, role),
-        created_by:users!project_tasks_created_by_id_fkey(id, first_name, last_name, telegram_username)
-      `)
+      .select("*")
       .eq("id", params.id)
       .single();
 
@@ -41,16 +37,41 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     // Fetch reports
-    const { data: reports } = await db
+    const { data: rawReports } = await db
       .from("project_task_reports")
-      .select(`
-        *,
-        technician:users!project_task_reports_technician_id_fkey(id, first_name, last_name, telegram_username, photo_url)
-      `)
+      .select("*")
       .eq("task_id", params.id)
       .order("created_at", { ascending: false });
 
-    return NextResponse.json({ task, reports: reports ?? [] });
+    // Fetch all involved users
+    const userIds = Array.from(
+      new Set(
+        [
+          task.assigned_to_id,
+          task.created_by_id,
+          ...(rawReports ?? []).map((r: any) => r.technician_id)
+        ].filter(Boolean)
+      )
+    );
+
+    let usersMap = new Map();
+    if (userIds.length > 0) {
+      const { data: users } = await db.from("users").select("*").in("id", userIds);
+      usersMap = new Map((users ?? []).map((u: any) => [u.id, u]));
+    }
+
+    const enrichedTask = {
+      ...task,
+      assigned_to: task.assigned_to_id ? usersMap.get(task.assigned_to_id) || null : null,
+      created_by: task.created_by_id ? usersMap.get(task.created_by_id) || null : null
+    };
+
+    const reports = (rawReports ?? []).map((r: any) => ({
+      ...r,
+      technician: r.technician_id ? usersMap.get(r.technician_id) || null : null
+    }));
+
+    return NextResponse.json({ task: enrichedTask, reports });
   } catch (err) {
     return errorResponse(err);
   }
