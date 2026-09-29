@@ -10,8 +10,8 @@ import type { DbProjectTask, DbUser } from "@/types/db";
 export const dynamic = "force-dynamic";
 
 const createTaskSchema = z.object({
-  title: z.string().min(3, "Task title must be at least 3 characters").max(200),
-  goal: z.string().min(5, "Task goal/description must be at least 5 characters").max(3000),
+  title: z.string().min(1, "Task title is required").max(200),
+  goal: z.string().min(1, "Task goal/description is required").max(3000),
   deadline: z.string().refine((d) => !isNaN(Date.parse(d)), "Invalid deadline date format"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
   assignedToId: z.string().uuid("Invalid technician ID").nullable().optional()

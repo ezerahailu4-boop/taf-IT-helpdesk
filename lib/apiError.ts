@@ -11,7 +11,8 @@ export function errorResponse(err: unknown) {
     return NextResponse.json({ error: err.message }, { status: 403 });
   }
   if (err instanceof z.ZodError) {
-    return NextResponse.json({ error: "Invalid input", issues: err.issues }, { status: 400 });
+    const detail = err.issues.map((i) => i.message).filter(Boolean).join(". ");
+    return NextResponse.json({ error: detail || "Invalid input", issues: err.issues }, { status: 400 });
   }
   const anyErr = err as { status?: number; message?: string };
   const status = anyErr?.status ?? 500;
