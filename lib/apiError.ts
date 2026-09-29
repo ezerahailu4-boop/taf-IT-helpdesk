@@ -19,5 +19,5 @@ export function errorResponse(err: unknown) {
     return NextResponse.json({ error: anyErr.message }, { status });
   }
   console.error("[api error]:", err);
-  return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  return NextResponse.json({ error: anyErr?.message || "Something went wrong" }, { status: 500 });
 }

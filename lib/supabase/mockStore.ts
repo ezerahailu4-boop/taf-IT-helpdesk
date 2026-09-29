@@ -148,6 +148,8 @@ interface MockDbStore {
   ticket_status_history: MockTicketStatusHistory[];
   ticket_attachments: MockTicketAttachment[];
   audit_logs: MockAuditLog[];
+  project_tasks: any[];
+  project_task_reports: any[];
   system_settings: { key: string; value: any; updated_at?: string }[];
   sla_events: { id: string; ticket_id: string; event_type: string; created_at: string }[];
   ticket_seq: number;
@@ -627,6 +629,49 @@ function seedData(): MockDbStore {
     system_settings: [
       { key: "it_group_chat_id", value: -1002233445566, updated_at: isoNow },
       { key: "employees_can_set_critical", value: false, updated_at: isoNow }
+    ],
+    project_tasks: [
+      {
+        id: "task-101",
+        title: "Deploy WPA3-Enterprise & Wi-Fi 6 APs in HQ",
+        goal: "Upgrade all floor 2 & floor 3 Cisco APs to support 802.11ax and 802.1X EAP-TLS certificate authentication for high security.",
+        deadline: new Date(now.getTime() + 5 * 86400000).toISOString(),
+        priority: "HIGH",
+        status: "IN_PROGRESS",
+        progress: 60,
+        assigned_to_id: userTechDanielId,
+        created_by_id: userAdminSarahId,
+        completion_note: null,
+        completed_at: null,
+        created_at: new Date(now.getTime() - 2 * 86400000).toISOString(),
+        updated_at: new Date(now.getTime() - 3600000).toISOString()
+      },
+      {
+        id: "task-102",
+        title: "Migrate LDAP Authentication to Entra ID (Azure AD)",
+        goal: "Synchronize company on-prem directory with Microsoft Entra ID and enforce Conditional Access MFA policies across all staff.",
+        deadline: new Date(now.getTime() + 12 * 86400000).toISOString(),
+        priority: "CRITICAL",
+        status: "PENDING",
+        progress: 0,
+        assigned_to_id: null,
+        created_by_id: userAdminSarahId,
+        completion_note: null,
+        completed_at: null,
+        created_at: new Date(now.getTime() - 1 * 86400000).toISOString(),
+        updated_at: new Date(now.getTime() - 1 * 86400000).toISOString()
+      }
+    ],
+    project_task_reports: [
+      {
+        id: "report-101",
+        task_id: "task-101",
+        technician_id: userTechDanielId,
+        report_text: "Completed mounting APs in Zone B. Currently configuring RADIUS certificate trust profile on the controller.",
+        progress: 60,
+        status: "IN_PROGRESS",
+        created_at: new Date(now.getTime() - 3600000).toISOString()
+      }
     ],
     sla_events: []
   };
