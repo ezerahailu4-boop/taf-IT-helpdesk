@@ -83,6 +83,7 @@ function ProjectTasksContent() {
   const [reportProgress, setReportProgress] = useState<number>(0);
   const [reportStatus, setReportStatus] = useState<ProjectTaskStatus>("IN_PROGRESS");
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   const fetchTasks = async () => {
     try {
@@ -173,6 +174,12 @@ function ProjectTasksContent() {
           status: reportStatus
         })
       });
+      setReportSubmitted(true);
+      setReportText("");
+      setTimeout(() => {
+        setReportSubmitted(false);
+      }, 4000);
+
       // Refresh detail and list
       await openTaskDetail(selectedTaskDetail.task.id);
       fetchTasks();
@@ -761,12 +768,27 @@ function ProjectTasksContent() {
                 </div>
               </div>
 
+              {reportSubmitted && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-center text-xs flex items-center justify-center gap-1.5 animate-pulse">
+                  <span>✅</span>
+                  <span>Report submitted successfully! Admins notified.</span>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={submittingReport || !reportText.trim()}
-                className="w-full py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50"
+                disabled={submittingReport || (!reportText.trim() && !reportSubmitted)}
+                className={`w-full py-2.5 rounded-xl font-bold text-white shadow-md transition-all ${
+                  reportSubmitted
+                    ? "bg-emerald-600 hover:bg-emerald-500 scale-[1.01]"
+                    : "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
+                }`}
               >
-                {submittingReport ? "Publishing Report..." : "🚀 Submit Work Report & Notify Admins"}
+                {submittingReport
+                  ? "Publishing Report..."
+                  : reportSubmitted
+                  ? "✅ Submitted!"
+                  : "🚀 Submit Work Report & Notify Admins"}
               </button>
             </form>
           </div>
