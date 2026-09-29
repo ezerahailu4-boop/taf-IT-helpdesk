@@ -53,3 +53,32 @@ export interface DbTicket {
   created_at: string;
   updated_at: string;
 }
+
+export type ProjectTaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "CANCELLED";
+export type ProjectTaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface DbProjectTask {
+  id: string;
+  title: string;
+  goal: string;
+  deadline: string;
+  priority: ProjectTaskPriority;
+  status: ProjectTaskStatus;
+  progress: number;
+  assigned_to_id: string | null;
+  created_by_id: string | null;
+  completion_note: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbProjectTaskReport {
+  id: string;
+  task_id: string;
+  technician_id: string;
+  report_text: string;
+  progress: number;
+  status: ProjectTaskStatus;
+  created_at: string;
+}

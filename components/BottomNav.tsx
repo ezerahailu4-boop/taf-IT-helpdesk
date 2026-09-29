@@ -13,17 +13,17 @@ const NAV: Record<UserRole, { href: string; label: string; icon: string }[]> = {
   ],
   TECHNICIAN: [
     { href: "/tech", label: "Workbench", icon: "👨‍💻" },
+    { href: "/admin/tasks", label: "Projects", icon: "🎯" },
     { href: "/tickets", label: "Queue", icon: "🎫" },
     { href: "/tickets?tab=critical", label: "Critical", icon: "🚨" },
-    { href: "/help", label: "Help", icon: "📚" },
     { href: "/profile", label: "Profile", icon: "👤" }
   ],
   ADMIN: [
     { href: "/admin", label: "Control", icon: "🛡️" },
+    { href: "/admin/tasks", label: "Projects", icon: "🎯" },
     { href: "/tech", label: "Tech Desk", icon: "👨‍💻" },
     { href: "/tickets", label: "Queue", icon: "🎫" },
-    { href: "/admin/reports", label: "Reports", icon: "📈" },
-    { href: "/admin/settings", label: "Settings", icon: "⚙️" }
+    { href: "/admin/reports", label: "Reports", icon: "📈" }
   ]
 };
 

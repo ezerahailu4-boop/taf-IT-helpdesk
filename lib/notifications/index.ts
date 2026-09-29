@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessage, miniAppButton } from "@/lib/telegram/bot";
-import type { DbTicket, DbUser } from "@/types/db";
+import type { DbTicket, DbUser, DbProjectTask } from "@/types/db";
 
 const priorityEmoji: Record<string, string> = {
   LOW: "🟢", MEDIUM: "🟡", HIGH: "🟠", CRITICAL: "🔴"
@@ -229,4 +229,71 @@ export async function notifyTicketRated(
   });
   await log(db, technician.id, ticket.id, "TICKET_RATED", "Ticket rated", text);
 }
+
+export async function notifyProjectTaskAssigned(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  technician: DbUser,
+  adminUser?: DbUser | null
+) {
+  if (!technician?.telegram_id) return;
+  const deadlineStr = new Date(task.deadline).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  const text =
+    `📌 <b>NEW PROJECT TASK ASSIGNED</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `🎯 <b>Goal:</b> ${task.goal}\n` +
+    `⚡ <b>Priority:</b> <b>${task.priority}</b>\n` +
+    `📅 <b>Deadline:</b> <code>${deadlineStr}</code>\n` +
+    (adminUser ? `👤 <b>Assigned By:</b> ${adminUser.first_name || "Admin"} (@${adminUser.telegram_username || "admin"})\n` : "") +
+    `\n<i>Please review the objectives and post regular progress reports.</i>`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [
+      [miniAppButton("📋 Open Task & Submit Report", `/admin/tasks?taskId=${task.id}`)]
+    ],
+    parseMode: "HTML"
+  });
+}
+
+export async function notifyProjectTaskUpdated(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  technician: DbUser,
+  reportText: string,
+  isCompleted: boolean
+) {
+  const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
+  if (!admins || admins.length === 0) return;
+
+  const techName = `${technician.first_name ?? "Technician"} ${technician.last_name ?? ""}`.trim();
+  const header = isCompleted
+    ? `🎉 <b>PROJECT TASK COMPLETED!</b>`
+    : `🚀 <b>PROJECT TASK PROGRESS UPDATE</b>`;
+
+  const text =
+    `${header}\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `👨‍💻 <b>Technician:</b> ${techName} (@${technician.telegram_username || "tech"})\n` +
+    `📊 <b>Progress:</b> <b>${task.progress}%</b> (${task.status.replace(/_/g, " ")})\n` +
+    `📝 <b>Work Report:</b>\n<i>"${reportText}"</i>`;
+
+  for (const admin of admins) {
+    if ((admin as DbUser).telegram_id && String((admin as DbUser).telegram_id) !== String(technician.telegram_id)) {
+      await sendMessage((admin as DbUser).telegram_id, text, {
+        buttons: [[miniAppButton("📋 View Project Task", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+}
+
 

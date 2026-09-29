@@ -164,6 +164,22 @@ export default function AdminDashboard() {
             </button>
 
             <Link
+              href="/admin/tasks"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all active:scale-95"
+            >
+              <span>🎯</span>
+              <span>Project Tasks</span>
+            </Link>
+
+            <Link
+              href="/admin/reports"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm"
+            >
+              <span>⭐</span>
+              <span>CSAT Reports</span>
+            </Link>
+
+            <Link
               href="/tech"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm"
             >
