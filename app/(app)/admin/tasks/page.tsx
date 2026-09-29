@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/apiClient";
@@ -54,7 +54,7 @@ const statusMeta: Record<ProjectTaskStatus, { label: string; bg: string; text: s
   CANCELLED: { label: "Cancelled", bg: "bg-gray-500/10 border-gray-500/20", text: "text-gray-500" }
 };
 
-export default function ProjectTasksPage() {
+function ProjectTasksContent() {
   const { user } = useMe();
   const searchParams = useSearchParams();
   const initialTaskId = searchParams.get("taskId");
@@ -777,3 +777,19 @@ export default function ProjectTasksPage() {
     </div>
   );
 }
+
+export default function ProjectTasksPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-center space-y-3">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-semibold">Loading Project Tasks & Goals...</p>
+        </div>
+      }
+    >
+      <ProjectTasksContent />
+    </Suspense>
+  );
+}
+

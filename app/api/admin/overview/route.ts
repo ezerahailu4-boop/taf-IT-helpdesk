@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/getUser";
-import { assertIsAdmin } from "@/lib/permissions";
+import { assertCanManageTicket } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { errorResponse } from "@/lib/apiError";
 import type { DbTicket, DbUser } from "@/types/db";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    assertIsAdmin(user);
+    assertCanManageTicket(user);
     const db = supabaseAdmin();
 
     const timeframe = req.nextUrl.searchParams.get("timeframe") || "all";
