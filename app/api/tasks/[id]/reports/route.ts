@@ -10,7 +10,7 @@ import type { DbProjectTask, DbUser } from "@/types/db";
 export const dynamic = "force-dynamic";
 
 const submitReportSchema = z.object({
-  reportText: z.string().min(3, "Report text must be at least 3 characters").max(4000),
+  reportText: z.string().max(4000).optional().nullable(),
   progress: z.number().min(0).max(100),
   status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED"]).default("IN_PROGRESS")
 });
@@ -38,6 +38,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const finalProgress = isCompleted ? 100 : body.progress;
     const finalStatus = isCompleted ? "COMPLETED" : body.status;
     const now = new Date().toISOString();
+    const effectiveReportText =
+      body.reportText && body.reportText.trim().length > 0
+        ? body.reportText.trim()
+        : `Progress updated to ${finalProgress}% (${finalStatus.replace(/_/g, " ")})`;
 
     // 2. Insert report entry
     const { data: report, error: reportErr } = await db
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .insert({
         task_id: task.id,
         technician_id: user.id,
-        report_text: body.reportText.trim(),
+        report_text: effectiveReportText,
         progress: finalProgress,
         status: finalStatus
       })
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (isCompleted) {
       taskUpdates.completed_at = now;
-      taskUpdates.completion_note = body.reportText.trim();
+      taskUpdates.completion_note = effectiveReportText;
     }
 
     const { data: updatedTask, error: updateErr } = await db
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (updateErr) throw new Error(updateErr.message);
 
     // 4. Notify Admin(s) via Telegram
-    await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, user, body.reportText.trim(), isCompleted);
+    await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, user, effectiveReportText, isCompleted);
 
     return NextResponse.json({ report: enrichedReport, task: updatedTask }, { status: 201 });
   } catch (err) {

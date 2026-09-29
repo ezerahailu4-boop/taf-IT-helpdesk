@@ -160,16 +160,16 @@ function ProjectTasksContent() {
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTaskDetail) return;
-    if (!reportText.trim()) {
-      alert("Please enter a work report or status note");
-      return;
-    }
     setSubmittingReport(true);
     try {
+      const finalNote =
+        reportText.trim() ||
+        `Progress updated to ${reportProgress}% (${reportStatus.replace(/_/g, " ")})`;
+
       await api(`/api/tasks/${selectedTaskDetail.task.id}/reports`, {
         method: "POST",
         body: JSON.stringify({
-          reportText: reportText.trim(),
+          reportText: finalNote,
           progress: reportProgress,
           status: reportStatus
         })
@@ -720,9 +720,8 @@ function ProjectTasksContent() {
               </span>
 
               <textarea
-                required
                 rows={2}
-                placeholder="Write what was accomplished, testing results, or current status update..."
+                placeholder="Optional: Write accomplishments, test notes, or blockers..."
                 value={reportText}
                 onChange={(e) => setReportText(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -777,8 +776,8 @@ function ProjectTasksContent() {
 
               <button
                 type="submit"
-                disabled={submittingReport || (!reportText.trim() && !reportSubmitted)}
-                className={`w-full py-2.5 rounded-xl font-bold text-white shadow-md transition-all ${
+                disabled={submittingReport}
+                className={`w-full py-2.5 rounded-xl font-bold text-white shadow-md transition-all active:scale-[0.98] ${
                   reportSubmitted
                     ? "bg-emerald-600 hover:bg-emerald-500 scale-[1.01]"
                     : "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
