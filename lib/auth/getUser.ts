@@ -115,6 +115,14 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
 
     // Try finding the real primary user first
     if (targetRole === "ADMIN") {
+      const { data: adonayAdmin } = await db
+        .from("users")
+        .select("*")
+        .eq("telegram_username", "not_adonay")
+        .maybeSingle();
+
+      if (adonayAdmin) return adonayAdmin as DbUser;
+
       const { data: ezeraAdmin } = await db
         .from("users")
         .select("*")
@@ -122,15 +130,6 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
         .maybeSingle();
 
       if (ezeraAdmin) return ezeraAdmin as DbUser;
-
-      const { data: adminUser } = await db
-        .from("users")
-        .select("*")
-        .eq("role", "ADMIN")
-        .limit(1)
-        .maybeSingle();
-
-      if (adminUser) return adminUser as DbUser;
     } else if (targetRole === "TECHNICIAN") {
       const { data: tinsuTech } = await db
         .from("users")

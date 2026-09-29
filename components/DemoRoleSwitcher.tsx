@@ -43,7 +43,7 @@ export function DemoRoleSwitcher({ currentRole }: { currentRole?: UserRole }) {
   const roleMeta: Record<UserRole, { label: string; icon: string; name: string }> = {
     EMPLOYEE: { label: "Employee", icon: "👤", name: "Abebe (Finance)" },
     TECHNICIAN: { label: "Technician", icon: "👨‍💻", name: "Tinsae (Triage Lead)" },
-    ADMIN: { label: "Admin", icon: "⚙️", name: "Ezera (IT Admin)" }
+    ADMIN: { label: "Admin", icon: "⚙️", name: "Adonay (IT Admin)" }
   };
 
   return (

@@ -99,6 +99,17 @@ export async function POST(req: NextRequest) {
 
     const body = createTaskSchema.parse(await req.json());
 
+    // Tasks are dispatched by Admin (default to Adonay @not_adonay, never Tinsu)
+    let assigner = user;
+    if (user.role !== "ADMIN" || user.telegram_username?.toLowerCase() === "tinsu2025") {
+      const { data: adonay } = await db
+        .from("users")
+        .select("*")
+        .eq("telegram_username", "not_adonay")
+        .maybeSingle();
+      if (adonay) assigner = adonay;
+    }
+
     const { data: task, error } = await db
       .from("project_tasks")
       .insert({
@@ -109,7 +120,7 @@ export async function POST(req: NextRequest) {
         status: "PENDING",
         progress: 0,
         assigned_to_id: body.assignedToId ?? null,
-        created_by_id: user.id
+        created_by_id: assigner.id
       })
       .select("*")
       .single();
@@ -120,7 +131,7 @@ export async function POST(req: NextRequest) {
     if (task.assigned_to_id) {
       const { data: tech } = await db.from("users").select("*").eq("id", task.assigned_to_id).single();
       if (tech) {
-        await notifyProjectTaskAssigned(db, task as DbProjectTask, tech as DbUser, user);
+        await notifyProjectTaskAssigned(db, task as DbProjectTask, tech as DbUser, assigner);
       }
     }
 
