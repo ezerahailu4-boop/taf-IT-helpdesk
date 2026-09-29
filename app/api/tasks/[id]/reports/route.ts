@@ -43,12 +43,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         ? body.reportText.trim()
         : `Progress updated to ${finalProgress}% (${finalStatus.replace(/_/g, " ")})`;
 
+    const initData = req.headers.get("x-telegram-init-data") || new URL(req.url).searchParams.get("initData");
+    let reportingUser = user;
+
+    // In browser demo mode (outside Telegram), if task is assigned to a technician,
+    // attribute the report to the assigned technician so progress updates match the assigned lead!
+    if (!initData && task.assigned_to_id) {
+      const { data: assignedTech } = await db.from("users").select("*").eq("id", task.assigned_to_id).single();
+      if (assignedTech) {
+        reportingUser = assignedTech;
+      }
+    }
+
     // 2. Insert report entry
     const { data: report, error: reportErr } = await db
       .from("project_task_reports")
       .insert({
         task_id: task.id,
-        technician_id: user.id,
+        technician_id: reportingUser.id,
         report_text: effectiveReportText,
         progress: finalProgress,
         status: finalStatus
@@ -61,11 +73,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const enrichedReport = {
       ...report,
       technician: {
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        telegram_username: user.telegram_username,
-        photo_url: user.photo_url
+        id: reportingUser.id,
+        first_name: reportingUser.first_name,
+        last_name: reportingUser.last_name,
+        telegram_username: reportingUser.telegram_username,
+        photo_url: reportingUser.photo_url
       }
     };
 
@@ -91,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (updateErr) throw new Error(updateErr.message);
 
     // 4. Notify Admin(s) via Telegram
-    await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, user, effectiveReportText, isCompleted);
+    await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText, isCompleted);
 
     return NextResponse.json({ report: enrichedReport, task: updatedTask }, { status: 201 });
   } catch (err) {
