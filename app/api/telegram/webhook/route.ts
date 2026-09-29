@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendMessage, answerCallbackQuery, miniAppButton } from "@/lib/telegram/bot";
 import { recordStatusChange, writeAudit } from "@/lib/tickets/audit";
-import { notifyTicketAssigned } from "@/lib/notifications";
+import { notifyTicketAssigned, notifyTicketRated } from "@/lib/notifications";
 
 /**
  * Telegram calls this webhook for every update. We verify the shared secret
@@ -391,6 +391,70 @@ async function handleCallback(db: ReturnType<typeof supabaseAdmin>, cb: any) {
       await db.from("tickets").update({ status: "REOPENED", reopened_count: (ticket.reopened_count ?? 0) + 1 }).eq("id", ticket.id);
       await recordStatusChange(db, { ticketId: ticket.id, changedBy: user.id, from: ticket.status, to: "REOPENED" });
       await answerCallbackQuery(cb.id, "Ticket reopened — IT has been notified.");
+      break;
+    }
+    case "rate": {
+      const [, tId, starStr] = String(cb.data ?? "").split(":");
+      const stars = parseInt(starStr, 10);
+      if (ticket.requester_id !== user.id) {
+        await answerCallbackQuery(cb.id, "Only the ticket creator can submit a rating.");
+        return;
+      }
+      if (isNaN(stars) || stars < 1 || stars > 5) {
+        await answerCallbackQuery(cb.id, "Invalid rating score.");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { data: updated } = await db
+        .from("tickets")
+        .update({
+          rating: stars,
+          rated_at: now,
+          status: "CLOSED",
+          closed_at: now,
+          closed_by: user.id,
+          updated_at: now
+        })
+        .eq("id", ticket.id)
+        .select("*")
+        .single();
+
+      await recordStatusChange(db, {
+        ticketId: ticket.id,
+        changedBy: user.id,
+        from: ticket.status,
+        to: "CLOSED",
+        note: `Rated ${stars} stars via Telegram`
+      });
+
+      await writeAudit(db, {
+        actorId: user.id,
+        action: "RATE",
+        objectType: "ticket",
+        objectId: ticket.id,
+        newValue: { rating: stars }
+      });
+
+      await answerCallbackQuery(cb.id, `Thank you for rating ${stars} ⭐!`);
+
+      // Notify the assigned technician
+      if (ticket.assigned_technician_id) {
+        const { data: tech } = await db.from("users").select("*").eq("id", ticket.assigned_technician_id).single();
+        if (tech) {
+          const requesterName = `${user.first_name ?? "Employee"} ${user.last_name ?? ""}`.trim();
+          await notifyTicketRated(db, updated, stars, null, requesterName, tech);
+        }
+      }
+
+      await sendMessage(
+        cb.from.id,
+        `🌟 <b>Thank You for Your Feedback!</b>\n\n` +
+        `You rated ticket <code>${ticket.ticket_number}</code>:\n` +
+        `<b>${"⭐".repeat(stars)} (${stars}/5)</b>\n\n` +
+        `Your feedback has been recorded and the ticket is now officially closed. Have a great day!`,
+        { parseMode: "HTML" }
+      );
       break;
     }
     default:

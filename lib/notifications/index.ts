@@ -142,12 +142,26 @@ export async function notifyStatusChange(db: SupabaseClient, ticket: DbTicket, r
 
 export async function notifyResolved(db: SupabaseClient, ticket: DbTicket, requester: DbUser, resolutionNote: string) {
   const text =
-    `✅ <b>IT Ticket Resolved</b>\n${ticket.ticket_number}\n\nYour issue has been resolved.\n\nResolution:\n${resolutionNote}\n\n⭐ <i>Please take a moment to rate your support experience.</i>`;
+    `✅ <b>IT Ticket Resolved</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📝 <b>Issue:</b> ${ticket.subject}\n\n` +
+    `🔧 <b>Resolution Note:</b>\n${resolutionNote || "Your issue has been marked resolved by our IT team."}\n\n` +
+    `⭐ <b>Please rate your support experience (1–5 Stars):</b>`;
+
   await sendMessage(requester.telegram_id, text, {
     buttons: [
-      [miniAppButton("⭐ Rate & Close Ticket", `/tickets/${ticket.id}`)],
-      [{ text: "✅ Confirm Resolved", callback_data: `confirm:${ticket.id}` }, { text: "🔄 Reopen Ticket", callback_data: `reopen:${ticket.id}` }]
-    ]
+      [
+        { text: "⭐ 1", callback_data: `rate:${ticket.id}:1` },
+        { text: "⭐ 2", callback_data: `rate:${ticket.id}:2` },
+        { text: "⭐ 3", callback_data: `rate:${ticket.id}:3` },
+        { text: "⭐ 4", callback_data: `rate:${ticket.id}:4` },
+        { text: "⭐ 5", callback_data: `rate:${ticket.id}:5` }
+      ],
+      [miniAppButton("💬 Write Review / Comment", `/tickets/${ticket.id}`)],
+      [{ text: "🔄 Reopen Ticket", callback_data: `reopen:${ticket.id}` }]
+    ],
+    parseMode: "HTML"
   });
   await log(db, requester.id, ticket.id, "TICKET_RESOLVED", "Ticket resolved", text);
 }
