@@ -44,8 +44,13 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
     if (fetchErr) throw new Error(fetchErr.message);
 
     const username = (tgUser.username || "").toLowerCase();
-    const isTinsu = username === "tinsu2025" || String(tgUser.id) === "6319536255";
-    const isDesignatedAdmin = String(tgUser.id) === "883942515" || String(tgUser.id) === "2074368152";
+    const TECH_USERNAMES = ["tinsu2025", "mati20", "kirabelll", "ik8927"];
+    const ADMIN_USERNAMES = ["ezrsh_404", "not_adonay"];
+    const TECH_IDS = ["6319536255", "7434354672"];
+    const ADMIN_IDS = ["883942515", "2074368152"];
+
+    const isDesignatedAdmin = ADMIN_IDS.includes(String(tgUser.id)) || ADMIN_USERNAMES.includes(username);
+    const isDesignatedTech = TECH_IDS.includes(String(tgUser.id)) || TECH_USERNAMES.includes(username);
 
     let matchedUser = existing;
     if (!matchedUser && tgUser.username) {
@@ -67,7 +72,7 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
       if (isDesignatedAdmin && matchedUser.role !== "ADMIN") {
         updateData.role = "ADMIN";
         matchedUser.role = "ADMIN";
-      } else if (isTinsu && matchedUser.role === "EMPLOYEE") {
+      } else if (isDesignatedTech && matchedUser.role === "EMPLOYEE") {
         updateData.role = "TECHNICIAN";
         matchedUser.role = "TECHNICIAN";
       }
@@ -88,8 +93,8 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
         last_name: tgUser.last_name,
         photo_url: tgUser.photo_url,
         language_code: tgUser.language_code,
-        role: isDesignatedAdmin ? "ADMIN" : isTinsu ? "TECHNICIAN" : "EMPLOYEE",
-        is_registered: isDesignatedAdmin || isTinsu ? true : false
+        role: isDesignatedAdmin ? "ADMIN" : isDesignatedTech ? "TECHNICIAN" : "EMPLOYEE",
+        is_registered: isDesignatedAdmin || isDesignatedTech ? true : false
       })
       .select("*")
       .single();

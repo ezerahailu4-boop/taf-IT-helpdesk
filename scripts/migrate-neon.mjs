@@ -393,41 +393,49 @@ async function migrate() {
       ON CONFLICT (key) DO NOTHING;
     `);
 
-    // 11. Seed Users (Ezera, Daniel, Michael, Samuel, Sarah)
+    // 11. Seed Users (Abebe, Tinsae, Matiyas, Kirubel, Ibrahim, Ezera, Adoni)
     console.log('👤 Seeding default users into Neon...');
     await client.query(`
       INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id)
-      SELECT 1001, 'ezera_h', 'Ezera', 'Hailu', 'EMPLOYEE',
+      SELECT 1001, 'abebe_k', 'Abebe', 'Kebede', 'EMPLOYEE',
              (SELECT id FROM departments WHERE name='Finance' LIMIT 1),
              (SELECT id FROM locations WHERE name='Head Office' LIMIT 1)
       WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1001);
 
       INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
-      SELECT 1002, 'daniel_it', 'Daniel', 'Worku', 'TECHNICIAN',
+      SELECT 6319536255, 'tinsu2025', 'Tinsae', 'Endashaw', 'TECHNICIAN',
+             (SELECT id FROM departments WHERE name='IT' LIMIT 1),
+             (SELECT id FROM locations WHERE name='Head Office' LIMIT 1),
+             (SELECT id FROM support_groups WHERE name='Network Team' LIMIT 1)
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 6319536255);
+
+      INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
+      SELECT 1002, 'Mati20', 'Matiyas', 'Tesfaye', 'TECHNICIAN',
              (SELECT id FROM departments WHERE name='IT' LIMIT 1),
              (SELECT id FROM locations WHERE name='Head Office' LIMIT 1),
              (SELECT id FROM support_groups WHERE name='Network Team' LIMIT 1)
       WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1002);
 
       INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
-      SELECT 1003, 'michael_chen', 'Michael', 'Chen', 'TECHNICIAN',
+      SELECT 1003, 'Kirabelll', 'Kirubel', 'Kassahun', 'TECHNICIAN',
              (SELECT id FROM departments WHERE name='IT' LIMIT 1),
              (SELECT id FROM locations WHERE name='Building B' LIMIT 1),
              (SELECT id FROM support_groups WHERE name='Hardware Team' LIMIT 1)
       WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1003);
 
       INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
-      SELECT 1004, 'samuel_t', 'Samuel', 'Tadesse', 'TECHNICIAN',
+      SELECT 7434354672, 'Ik8927', 'Ibrahim', 'Geletaw', 'TECHNICIAN',
              (SELECT id FROM departments WHERE name='IT' LIMIT 1),
              (SELECT id FROM locations WHERE name='Head Office' LIMIT 1),
              (SELECT id FROM support_groups WHERE name='Systems Team' LIMIT 1)
-      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1004);
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 7434354672);
 
-      INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id)
-      SELECT 1005, 'sarah_admin', 'Sarah', 'Connor', 'ADMIN',
+      INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
+      SELECT 2074368152, 'Ezrsh_404', 'Ezera', 'Hailu', 'ADMIN',
              (SELECT id FROM departments WHERE name='IT' LIMIT 1),
-             (SELECT id FROM locations WHERE name='Head Office' LIMIT 1)
-      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 1005);
+             (SELECT id FROM locations WHERE name='Head Office' LIMIT 1),
+             (SELECT id FROM support_groups WHERE name='Network Team' LIMIT 1)
+      WHERE NOT EXISTS (SELECT 1 FROM users WHERE telegram_id = 2074368152);
 
       INSERT INTO users (telegram_id, telegram_username, first_name, last_name, role, department_id, location_id, support_group_id)
       SELECT 883942515, 'not_adonay', 'Adoni', '', 'ADMIN',

@@ -35,26 +35,33 @@ export async function POST(req: NextRequest) {
 
 async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from: any) {
   const username = (from.username || "").toLowerCase();
-  const isTinsu = username === "tinsu2025" || String(from.id) === "6319536255";
-  const isDesignatedAdmin = String(from.id) === "883942515" || String(from.id) === "2074368152";
+  const TECH_USERNAMES = ["tinsu2025", "mati20", "kirabelll", "ik8927"];
+  const ADMIN_USERNAMES = ["ezrsh_404", "not_adonay"];
+  const TECH_IDS = ["6319536255", "7434354672"];
+  const ADMIN_IDS = ["883942515", "2074368152"];
+
+  const isDesignatedAdmin = ADMIN_IDS.includes(String(from.id)) || ADMIN_USERNAMES.includes(username);
+  const isDesignatedTech = TECH_IDS.includes(String(from.id)) || TECH_USERNAMES.includes(username);
 
   let { data: existing } = await db.from("users").select("*").eq("telegram_id", from.id).maybeSingle();
 
-  // If not found by telegram_id, check if pre-seeded by username (like @tinsu2025)
+  // If not found by telegram_id, check if pre-seeded by username
   if (!existing && from.username) {
     const { data: byUsername } = await db.from("users").select("*").ilike("telegram_username", from.username).maybeSingle();
     if (byUsername) {
       existing = byUsername;
+      const targetRole = isDesignatedAdmin ? "ADMIN" : (isDesignatedTech || existing.role === "TECHNICIAN") ? "TECHNICIAN" : existing.role;
       await db.from("users").update({
         telegram_id: from.id,
         first_name: from.first_name || existing.first_name,
         last_name: from.last_name || existing.last_name,
-        role: isTinsu ? "TECHNICIAN" : existing.role,
+        role: targetRole,
         is_registered: true,
         is_active: true,
         last_active_at: new Date().toISOString()
       }).eq("id", existing.id);
       existing.telegram_id = from.id;
+      existing.role = targetRole;
       return existing;
     }
   }
@@ -64,13 +71,12 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
     if (from.username && from.username !== existing.telegram_username) {
       updates.telegram_username = from.username;
     }
-    if (isTinsu && existing.role === "EMPLOYEE") {
-      updates.role = "TECHNICIAN";
-      existing.role = "TECHNICIAN";
-    }
     if (isDesignatedAdmin && existing.role !== "ADMIN") {
       updates.role = "ADMIN";
       existing.role = "ADMIN";
+    } else if (isDesignatedTech && existing.role === "EMPLOYEE") {
+      updates.role = "TECHNICIAN";
+      existing.role = "TECHNICIAN";
     }
     if (Object.keys(updates).length > 0) {
       await db.from("users").update(updates).eq("id", existing.id);
@@ -85,8 +91,9 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
       telegram_username: from.username,
       first_name: from.first_name,
       last_name: from.last_name,
-      role: isDesignatedAdmin ? "ADMIN" : isTinsu ? "TECHNICIAN" : "EMPLOYEE",
-      is_registered: isDesignatedAdmin || isTinsu ? true : false
+      role: isDesignatedAdmin ? "ADMIN" : isDesignatedTech ? "TECHNICIAN" : "EMPLOYEE",
+      is_registered: isDesignatedAdmin || isDesignatedTech ? true : false,
+      is_active: true
     })
     .select("*")
     .single();
@@ -105,7 +112,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     if (!rawName) {
       await sendMessage(
         chatId,
-        `📝 <b>Update Your Employee Name:</b>\nPlease reply with your full name, for example:\n<code>/name Ezera Hailu</code>`,
+        `📝 <b>Update Your Employee Name:</b>\nPlease reply with your full name, for example:\n<code>/name abebe kebede</code>`,
         { parseMode: "HTML" }
       );
       return;
@@ -141,7 +148,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     if (text.startsWith("/start")) {
       await sendMessage(
         chatId,
-        `👋 <b>Welcome to Company IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: Ezera Hailu</i>`,
+        `👋 <b>Welcome to Company IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: abebe kebede</i>`,
         { parseMode: "HTML" }
       );
       return;

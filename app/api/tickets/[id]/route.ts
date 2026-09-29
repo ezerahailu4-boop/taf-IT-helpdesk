@@ -6,7 +6,7 @@ import {
   assertCanViewTicket, assertCanManageTicket, assertCanSeeInternalNotes, assertCanSetPriority
 } from "@/lib/permissions";
 import { recordStatusChange, writeAudit } from "@/lib/tickets/audit";
-import { notifyStatusChange, notifyTicketAssigned } from "@/lib/notifications";
+import { notifyStatusChange, notifyTicketAssigned, notifyResolved } from "@/lib/notifications";
 import { errorResponse } from "@/lib/apiError";
 import type { DbTicket, DbUser } from "@/types/db";
 
@@ -78,7 +78,8 @@ const patchSchema = z.object({
   priority: z.enum(["LOW","MEDIUM","HIGH","CRITICAL"]).optional(),
   assignedTechnicianId: z.string().uuid().nullable().optional(),
   categoryId: z.string().uuid().optional(),
-  categoryKey: z.string().optional()
+  categoryKey: z.string().optional(),
+  resolutionNote: z.string().optional()
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -104,7 +105,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       update.assigned_technician_id = body.assignedTechnicianId;
       if (body.assignedTechnicianId && ticket.status === "NEW") update.status = "ASSIGNED";
     }
-    if (body.status) update.status = body.status;
+    if (body.status) {
+      update.status = body.status;
+      if (body.status === "RESOLVED") {
+        update.resolved_at = new Date().toISOString();
+        if (body.resolutionNote) update.resolution_note = body.resolutionNote;
+      }
+    }
 
     const { data: updated, error: updateErr } = await db
       .from("tickets").update(update).eq("id", ticket.id).select("*").single();
@@ -113,7 +120,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.status && body.status !== ticket.status) {
       await recordStatusChange(db, { ticketId: ticket.id, changedBy: user.id, from: ticket.status, to: body.status });
       const { data: requester } = await db.from("users").select("*").eq("id", ticket.requester_id).single();
-      if (requester) await notifyStatusChange(db, updated as DbTicket, requester, ticket.status, body.status);
+      if (requester) {
+        if (body.status === "RESOLVED") {
+          await notifyResolved(db, updated as DbTicket, requester, (body.resolutionNote as string) || "Your issue has been marked resolved by our IT technician.");
+        } else {
+          await notifyStatusChange(db, updated as DbTicket, requester, ticket.status, body.status);
+        }
+      }
     }
 
     if (body.assignedTechnicianId && body.assignedTechnicianId !== ticket.assigned_technician_id) {
