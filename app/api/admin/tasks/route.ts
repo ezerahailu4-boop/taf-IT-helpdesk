@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    assertIsAdmin(user);
+    assertCanManageTicket(user);
     const db = supabaseAdmin();
 
     const body = createTaskSchema.parse(await req.json());

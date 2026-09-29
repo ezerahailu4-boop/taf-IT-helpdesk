@@ -262,15 +262,13 @@ function ProjectTasksContent() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
-              >
-                <span>➕</span>
-                <span>New Project Task</span>
-              </button>
-            )}
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+            >
+              <span>➕</span>
+              <span>New Project Task</span>
+            </button>
 
             <Link
               href="/admin"
