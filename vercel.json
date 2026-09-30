@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/sla-sweep", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/sla-sweep", "schedule": "0 8 * * *" }
   ]
 }
