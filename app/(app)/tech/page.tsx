@@ -4,12 +4,13 @@ import Link from "next/link";
 import { api } from "@/lib/apiClient";
 import { useMe } from "@/lib/useMe";
 import { TicketCard, CardSkeleton, EmptyState } from "@/components/TicketCard";
-import type { DbTicket } from "@/types/db";
+import type { DbTicket, DbProjectTask } from "@/types/db";
 
 export default function TechDashboard() {
   const { user, counts, loading, reload } = useMe();
   const [activeTab, setActiveTab] = useState<"mine" | "unassigned" | "critical" | "waiting">("mine");
   const [allTickets, setAllTickets] = useState<DbTicket[]>([]);
+  const [myTasks, setMyTasks] = useState<DbProjectTask[]>([]);
   const [fetching, setFetching] = useState(true);
   const [takingId, setTakingId] = useState<string | null>(null);
 
@@ -24,11 +25,23 @@ export default function TechDashboard() {
         console.error("Failed to load technician queue:", err);
         setFetching(false);
       });
+
+    // Fetch assigned project tasks
+    api<{ tasks: DbProjectTask[] }>("/api/admin/tasks")
+      .then((d) => {
+        if (d?.tasks) {
+          const userTasks = d.tasks.filter(
+            (t) => t.assigned_to_id === user?.id && t.status !== "COMPLETED" && t.status !== "CANCELLED"
+          );
+          setMyTasks(userTasks);
+        }
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
     fetchTickets();
-  }, []);
+  }, [user?.id]);
 
   const openTickets = allTickets.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status));
   const myTickets = openTickets.filter((t) => t.assigned_technician_id === user?.id);
@@ -194,6 +207,91 @@ export default function TechDashboard() {
           <p className="text-[10px] text-slate-500 mt-0.5">Customer replies</p>
         </button>
       </div>
+
+      {/* Assigned Project Tasks Widget */}
+      {myTasks.length > 0 && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 rounded-3xl p-5 shadow-xl space-y-3 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎯</span>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base text-white">
+                  Your Assigned Project Tasks ({myTasks.length})
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  Target infrastructure goals and deployments assigned to you by Admin
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/tasks"
+              className="text-xs font-bold text-indigo-300 hover:text-white flex items-center gap-1 bg-white/10 px-3 py-1.5 rounded-xl transition-all"
+            >
+              <span>View All</span>
+              <span>→</span>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {myTasks.map((t) => {
+              const due = new Date(t.deadline);
+              const now = new Date();
+              const diffHours = Math.round((due.getTime() - now.getTime()) / (1000 * 3600));
+              const isOverdue = diffHours < 0;
+              const dueText = isOverdue
+                ? `${Math.abs(diffHours)}h overdue`
+                : diffHours < 24
+                ? `due in ${diffHours}h`
+                : `due in ${Math.round(diffHours / 24)}d`;
+
+              return (
+                <Link
+                  key={t.id}
+                  href={`/admin/tasks?taskId=${t.id}`}
+                  className="group bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-400/40 p-4 rounded-2xl transition-all flex flex-col justify-between space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-extrabold text-xs text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
+                      {t.title}
+                    </span>
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                        isOverdue
+                          ? "bg-red-500/20 text-red-300 border-red-500/30 animate-pulse"
+                          : "bg-slate-800 text-slate-300 border-slate-700"
+                      }`}
+                    >
+                      {dueText}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 line-clamp-2">{t.goal}</p>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-slate-400 font-medium">Progress</span>
+                      <span className="font-mono font-bold text-indigo-400">{t.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300"
+                        style={{ width: `${t.progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <span className="text-[11px] font-bold text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1">
+                      <span>Post Progress & Report</span>
+                      <span>→</span>
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Interactive Tab Switcher */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
