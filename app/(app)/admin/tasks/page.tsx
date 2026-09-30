@@ -99,6 +99,11 @@ function ProjectTasksContent() {
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const isSubmittingRef = useRef(false);
 
+  // Edit Assignees in Task Detail Drawer
+  const [isEditingAssignees, setIsEditingAssignees] = useState(false);
+  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([]);
+  const [savingAssignees, setSavingAssignees] = useState(false);
+
   // Live Sync & SLA Sweep States
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
@@ -169,10 +174,33 @@ function ProjectTasksContent() {
       setReportProgress(res.task.progress);
       setReportStatus(res.task.status);
       setReportText("");
+      const currentIds = (res.task.assigned_technicians && res.task.assigned_technicians.length > 0)
+        ? res.task.assigned_technicians.map((t: any) => t.id)
+        : (res.task.assigned_to_id ? [res.task.assigned_to_id] : []);
+      setEditAssigneeIds(currentIds);
+      setIsEditingAssignees(false);
     } catch (err) {
       alert("Failed to load task details");
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleSaveAssignees = async () => {
+    if (!selectedTaskDetail) return;
+    setSavingAssignees(true);
+    try {
+      await api<{ task: any }>(`/api/tasks/${selectedTaskDetail.task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ assignedTechnicianIds: editAssigneeIds })
+      });
+      await openTaskDetail(selectedTaskDetail.task.id);
+      fetchTasks(true);
+      setIsEditingAssignees(false);
+    } catch (err: any) {
+      alert(err.message || "Failed to update assigned technicians");
+    } finally {
+      setSavingAssignees(false);
     }
   };
 
@@ -908,52 +936,151 @@ function ProjectTasksContent() {
             </div>
 
             {/* Assignee & Overall Progress Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50/50 dark:bg-slate-800/30 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
-              <div>
+            <div className="space-y-3 bg-slate-50/50 dark:bg-slate-800/30 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between gap-2">
                 <span className="opacity-60 block text-[10px] uppercase font-bold">
                   {selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 1
                     ? `Assigned Lead Technicians (${selectedTaskDetail.task.assigned_technicians.length}):`
                     : "Assigned Lead Technician:"}
                 </span>
-                {selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 1 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {selectedTaskDetail.task.assigned_technicians.map((tech: any, idx: number) => (
-                      <span
-                        key={tech.id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                      >
-                        <span>{idx === 0 ? "👑" : "🤝"}</span>
-                        <span>{tech.first_name} {tech.last_name || ""}</span>
-                        {tech.telegram_username && (
-                          <span className="opacity-70 font-normal font-mono text-[10px]">@{tech.telegram_username}</span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
+
+                {!isEditingAssignees ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentIds = (selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 0)
+                        ? selectedTaskDetail.task.assigned_technicians.map((t: any) => t.id)
+                        : (selectedTaskDetail.task.assigned_to_id ? [selectedTaskDetail.task.assigned_to_id] : []);
+                      setEditAssigneeIds(currentIds);
+                      setIsEditingAssignees(true);
+                    }}
+                    className="px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-900/40 flex items-center gap-1 transition-all active:scale-95"
+                  >
+                    <span>✏️</span>
+                    <span>Reassign / Add Leads</span>
+                  </button>
                 ) : (
-                  <p className="font-extrabold text-sm text-slate-900 dark:text-white mt-0.5">
-                    {selectedTaskDetail.task.assigned_to ? `${selectedTaskDetail.task.assigned_to.first_name} ${selectedTaskDetail.task.assigned_to.last_name || ""}` : "Unassigned"}
-                    {selectedTaskDetail.task.assigned_to?.telegram_username && (
-                      <span className="text-xs font-normal text-indigo-500 ml-1">(@{selectedTaskDetail.task.assigned_to.telegram_username})</span>
-                    )}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={savingAssignees}
+                      onClick={() => setIsEditingAssignees(false)}
+                      className="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingAssignees}
+                      onClick={handleSaveAssignees}
+                      className="px-3 py-1 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <span>{savingAssignees ? "Saving..." : `Save & Dispatch (${editAssigneeIds.length})`}</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
-              <div>
-                <div className="flex justify-between items-center">
-                  <span className="opacity-60 text-[10px] uppercase font-bold">Current Progress:</span>
-                  <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">{selectedTaskDetail.task.progress}%</span>
+              {!isEditingAssignees ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    {selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {selectedTaskDetail.task.assigned_technicians.map((tech: any, idx: number) => (
+                          <span
+                            key={tech.id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-xs"
+                          >
+                            <span>{idx === 0 ? "👑" : "🤝"}</span>
+                            <span>{tech.first_name} {tech.last_name || ""}</span>
+                            {tech.telegram_username && (
+                              <span className="opacity-70 font-normal font-mono text-[10px]">@{tech.telegram_username}</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="font-extrabold text-sm text-slate-900 dark:text-white mt-0.5">
+                        {selectedTaskDetail.task.assigned_to ? `${selectedTaskDetail.task.assigned_to.first_name} ${selectedTaskDetail.task.assigned_to.last_name || ""}` : "Unassigned"}
+                        {selectedTaskDetail.task.assigned_to?.telegram_username && (
+                          <span className="text-xs font-normal text-indigo-500 ml-1">(@{selectedTaskDetail.task.assigned_to.telegram_username})</span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-60 text-[10px] uppercase font-bold">Current Progress:</span>
+                      <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">{selectedTaskDetail.task.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          selectedTaskDetail.task.status === "COMPLETED" ? "bg-emerald-500" : "bg-indigo-600"
+                        }`}
+                        style={{ width: `${selectedTaskDetail.task.progress}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      selectedTaskDetail.task.status === "COMPLETED" ? "bg-emerald-500" : "bg-indigo-600"
-                    }`}
-                    style={{ width: `${selectedTaskDetail.task.progress}%` }}
-                  />
+              ) : (
+                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Select one or more lead technicians. The first engineer selected will act as Primary Lead (👑), and additional engineers as Co-Leads (🤝).
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+                    {data?.technicians.map((t) => {
+                      const idx = editAssigneeIds.indexOf(t.id);
+                      const isSelected = idx !== -1;
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            setEditAssigneeIds((prev) =>
+                              prev.includes(t.id) ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                            );
+                          }}
+                          className={`flex items-center gap-2.5 p-2 rounded-xl border text-xs cursor-pointer transition-all ${
+                            isSelected
+                              ? "bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-400 dark:border-indigo-600 shadow-xs"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 pointer-events-none"
+                          />
+                          <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0">
+                            {t.first_name?.[0] || "T"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 truncate text-xs">
+                                {t.first_name} {t.last_name || ""}
+                              </span>
+                              {isSelected && (
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
+                                  idx === 0
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                                    : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700"
+                                }`}>
+                                  {idx === 0 ? "👑 Lead" : "🤝 Co-Lead"}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono block truncate">
+                              @{t.telegram_username || "tech"} • {t.activeTasksCount} active
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Technician Work Reports Timeline */}
