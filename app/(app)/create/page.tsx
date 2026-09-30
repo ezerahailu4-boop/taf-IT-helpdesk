@@ -4,11 +4,71 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, uploadFile, ApiError } from "@/lib/apiClient";
 import { useTelegram } from "@/lib/telegram/useTelegram";
+import type { TicketPriority } from "@/types/db";
 
 type Category = { id: string; key: string; label: string; icon: string };
 type LocationRow = { id: string; name: string };
 type AssetRow = { id: string; asset_tag: string; type: string; brand: string | null; model: string | null };
 type ArticleSuggestion = { id: string; title: string; category_id: string; keywords: string[] };
+
+const PRIORITY_OPTIONS: {
+  key: TicketPriority;
+  label: string;
+  emoji: string;
+  desc: string;
+  badgeBg: string;
+  badgeText: string;
+  borderColor: string;
+  activeRing: string;
+  activeBg: string;
+}[] = [
+  {
+    key: "LOW",
+    label: "Low",
+    emoji: "🟢",
+    desc: "Minor question or inquiry • Work not blocked",
+    badgeBg: "bg-emerald-500/15",
+    badgeText: "text-emerald-600 dark:text-emerald-400",
+    borderColor: "border-emerald-500/30",
+    activeRing: "ring-2 ring-emerald-500",
+    activeBg: "bg-emerald-500/10 border-emerald-500/60"
+  },
+  {
+    key: "MEDIUM",
+    label: "Medium",
+    emoji: "🟡",
+    desc: "Standard issue • Work impaired, workaround exists",
+    badgeBg: "bg-amber-500/15",
+    badgeText: "text-amber-600 dark:text-amber-400",
+    borderColor: "border-amber-500/30",
+    activeRing: "ring-2 ring-amber-500",
+    activeBg: "bg-amber-500/10 border-amber-500/60"
+  },
+  {
+    key: "HIGH",
+    label: "High",
+    emoji: "🟠",
+    desc: "Urgent issue • Major work blocked or deadline",
+    badgeBg: "bg-orange-500/15",
+    badgeText: "text-orange-600 dark:text-orange-400",
+    borderColor: "border-orange-500/30",
+    activeRing: "ring-2 ring-orange-500",
+    activeBg: "bg-orange-500/10 border-orange-500/60"
+  },
+  {
+    key: "CRITICAL",
+    label: "Critical",
+    emoji: "🔴",
+    desc: "Severe emergency • Complete outage / system down",
+    badgeBg: "bg-red-500/15",
+    badgeText: "text-red-600 dark:text-red-400",
+    borderColor: "border-red-500/30",
+    activeRing: "ring-2 ring-red-500",
+    activeBg: "bg-red-500/10 border-red-500/60"
+  }
+];
+
+const priorityMeta = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.key, p]));
 
 export default function CreateTicketPage() {
   const router = useRouter();
@@ -22,6 +82,7 @@ export default function CreateTicketPage() {
   const [categoryKey, setCategoryKey] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<TicketPriority>("MEDIUM");
   const [locationId, setLocationId] = useState<string | null>(null);
   const [assetId, setAssetId] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -64,7 +125,7 @@ export default function CreateTicketPage() {
     try {
       const { ticket } = await api<{ ticket: { id: string } }>("/api/tickets", {
         method: "POST",
-        body: JSON.stringify({ categoryKey, subject, description, locationId, assetId })
+        body: JSON.stringify({ categoryKey, subject, description, priority, locationId, assetId })
       });
       for (const file of files) {
         await uploadFile(file, ticket.id).catch(() => null);
@@ -153,11 +214,67 @@ export default function CreateTicketPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Tell us what happened, any error messages shown, and when it started..."
-              rows={5}
+              rows={4}
               className="w-full rounded-2xl p-3.5 card text-sm border focus:outline-none focus:ring-2 focus:ring-blue-500"
               style={{ borderColor: "rgba(0,0,0,0.08)" }}
               maxLength={4000}
             />
+          </div>
+
+          {/* Priority Level Selector */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold block">
+                Priority Level <span className="opacity-60 font-normal text-[11px]">(Urgency & Impact)</span>
+              </label>
+              <span
+                className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                  priorityMeta[priority]?.badgeBg
+                } ${priorityMeta[priority]?.badgeText} ${priorityMeta[priority]?.borderColor}`}
+              >
+                <span>{priorityMeta[priority]?.emoji}</span>
+                <span>{priorityMeta[priority]?.label} Priority</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+              {PRIORITY_OPTIONS.map((p) => {
+                const isSelected = priority === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => {
+                      setPriority(p.key);
+                      haptic("light");
+                    }}
+                    className={`card p-3 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+                      isSelected
+                        ? `${p.activeBg} ${p.activeRing} shadow-sm scale-[1.01]`
+                        : "hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                    style={{ borderColor: isSelected ? undefined : "rgba(0,0,0,0.08)" }}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base">{p.emoji}</span>
+                        <span className="font-extrabold text-xs block leading-tight">
+                          {p.label}
+                        </span>
+                      </div>
+                      {isSelected && (
+                        <span className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
+                          ✓
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] opacity-70 mt-1 leading-snug">
+                      {p.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Section 28: Suggested Articles to self-resolve */}
@@ -250,6 +367,17 @@ export default function CreateTicketPage() {
               <span className="opacity-60 block">Category:</span>
               <span className="font-semibold text-sm">
                 {selectedCat?.icon} {selectedCat?.label}
+              </span>
+            </div>
+            <div>
+              <span className="opacity-60 block">Priority Level:</span>
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border mt-0.5 ${
+                  priorityMeta[priority]?.badgeBg
+                } ${priorityMeta[priority]?.badgeText} ${priorityMeta[priority]?.borderColor}`}
+              >
+                <span>{priorityMeta[priority]?.emoji}</span>
+                <span>{priorityMeta[priority]?.label} Priority</span>
               </span>
             </div>
             <div>
