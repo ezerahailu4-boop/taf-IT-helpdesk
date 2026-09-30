@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/apiClient";
@@ -96,6 +96,7 @@ function ProjectTasksContent() {
   const [reportStatus, setReportStatus] = useState<ProjectTaskStatus>("IN_PROGRESS");
   const [submittingReport, setSubmittingReport] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Live Sync & SLA Sweep States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -211,6 +212,20 @@ function ProjectTasksContent() {
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTaskDetail) return;
+    if (submittingReport || isSubmittingRef.current || reportSubmitted) return;
+
+    // Prevent duplicate submission if nothing changed and note is empty
+    const isUnchanged =
+      reportProgress === selectedTaskDetail.task.progress &&
+      reportStatus === selectedTaskDetail.task.status &&
+      !reportText.trim();
+
+    if (isUnchanged) {
+      alert("Please adjust progress, change task status, or write a work note before submitting.");
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setSubmittingReport(true);
     try {
       const finalNote =
@@ -227,17 +242,19 @@ function ProjectTasksContent() {
       });
       setReportSubmitted(true);
       setReportText("");
-      setTimeout(() => {
-        setReportSubmitted(false);
-      }, 4000);
 
       // Refresh detail and list
       await openTaskDetail(selectedTaskDetail.task.id);
-      fetchTasks();
+      fetchTasks(true);
+
+      setTimeout(() => {
+        setReportSubmitted(false);
+      }, 3000);
     } catch (err: any) {
       alert(err.message || "Failed to submit work report");
     } finally {
       setSubmittingReport(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -783,13 +800,18 @@ function ProjectTasksContent() {
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
                   Technician Work Reports ({selectedTaskDetail.reports.length})
                 </h4>
-                {selectedTaskDetail.task.status !== "COMPLETED" && (
+                {selectedTaskDetail.task.status !== "COMPLETED" ? (
                   <button
                     onClick={() => handleQuickStatusChange(selectedTaskDetail.task.id, "COMPLETED", 100)}
-                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all"
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all active:scale-95"
                   >
                     ✅ Mark Task 100% Completed
                   </button>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <span>🎉</span>
+                    <span>Completed (100%)</span>
+                  </span>
                 )}
               </div>
 
@@ -889,18 +911,39 @@ function ProjectTasksContent() {
 
               <button
                 type="submit"
-                disabled={submittingReport}
-                className={`w-full py-2.5 rounded-xl font-bold text-white shadow-md transition-all active:scale-[0.98] ${
+                disabled={
+                  submittingReport ||
+                  reportSubmitted ||
+                  (selectedTaskDetail.task.status === "COMPLETED" &&
+                    reportStatus === "COMPLETED" &&
+                    reportProgress === 100 &&
+                    !reportText.trim())
+                }
+                className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition-all active:scale-[0.98] ${
                   reportSubmitted
-                    ? "bg-emerald-600 hover:bg-emerald-500 scale-[1.01]"
+                    ? "bg-emerald-600 cursor-not-allowed scale-[1.01]"
+                    : submittingReport
+                    ? "bg-indigo-700 opacity-60 cursor-not-allowed"
+                    : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim()
+                    ? "bg-slate-700 text-slate-300 opacity-80 cursor-not-allowed"
                     : "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
                 }`}
               >
-                {submittingReport
-                  ? "Publishing Report..."
-                  : reportSubmitted
-                  ? "✅ Submitted!"
-                  : "🚀 Submit Work Report & Notify Admins"}
+                {submittingReport ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Publishing Report...</span>
+                  </span>
+                ) : reportSubmitted ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span>✅</span>
+                    <span>Submitted Successfully!</span>
+                  </span>
+                ) : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim() ? (
+                  <span>🎉 Task Completed (Type note to post addendum)</span>
+                ) : (
+                  <span>🚀 Submit Work Report & Notify Admins</span>
+                )}
               </button>
             </form>
           </div>

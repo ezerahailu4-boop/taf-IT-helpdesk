@@ -55,7 +55,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
 
-    // 2. Insert report entry
+    // 2. Prevent duplicate rapid submissions (e.g. user clicked submit 4 or 5 times)
+    const { data: recentDuplicate } = await db
+      .from("project_task_reports")
+      .select("*")
+      .eq("task_id", task.id)
+      .eq("progress", finalProgress)
+      .eq("status", finalStatus)
+      .eq("report_text", effectiveReportText)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentDuplicate) {
+      const createdMs = new Date(recentDuplicate.created_at).getTime();
+      if (Date.now() - createdMs < 10000) {
+        // Return existing duplicate report without creating redundant rows or sending duplicate Telegram alerts!
+        return NextResponse.json({
+          report: {
+            ...recentDuplicate,
+            technician: {
+              id: reportingUser.id,
+              first_name: reportingUser.first_name,
+              last_name: reportingUser.last_name,
+              telegram_username: reportingUser.telegram_username,
+              photo_url: reportingUser.photo_url
+            }
+          },
+          task,
+          duplicatePrevented: true
+        });
+      }
+    }
+
+    // 3. Insert report entry
     const { data: report, error: reportErr } = await db
       .from("project_task_reports")
       .insert({
