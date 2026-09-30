@@ -17,6 +17,7 @@ const patchTaskSchema = z.object({
   status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().min(0).max(100).optional(),
   assignedToId: z.string().uuid().nullable().optional(),
+  assignedTechnicianIds: z.array(z.string().uuid()).optional(),
   completionNote: z.string().max(2000).optional()
 });
 
@@ -43,11 +44,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .eq("task_id", params.id)
       .order("created_at", { ascending: false });
 
+    const assignedTechIds: string[] = (task.assigned_technician_ids && task.assigned_technician_ids.length > 0)
+      ? task.assigned_technician_ids
+      : (task.assigned_to_id ? [task.assigned_to_id] : []);
+
     // Fetch all involved users
     const userIds = Array.from(
       new Set(
         [
           task.assigned_to_id,
+          ...assignedTechIds,
           task.created_by_id,
           ...(rawReports ?? []).map((r: any) => r.technician_id)
         ].filter(Boolean)
@@ -60,9 +66,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       usersMap = new Map((users ?? []).map((u: any) => [u.id, u]));
     }
 
+    const assignedTechnicians = assignedTechIds.map((id) => usersMap.get(id)).filter(Boolean);
+
     const enrichedTask = {
       ...task,
-      assigned_to: task.assigned_to_id ? usersMap.get(task.assigned_to_id) || null : null,
+      assigned_to: task.assigned_to_id ? usersMap.get(task.assigned_to_id) || null : (assignedTechnicians[0] || null),
+      assigned_technicians: assignedTechnicians,
       created_by: task.created_by_id ? usersMap.get(task.created_by_id) || null : null
     };
 
@@ -115,8 +124,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         updates.completed_at = new Date().toISOString();
       }
     }
-    if (body.assignedToId !== undefined) {
+    let newlyAssignedIds: string[] = [];
+    if (body.assignedTechnicianIds !== undefined) {
+      updates.assigned_technician_ids = body.assignedTechnicianIds;
+      updates.assigned_to_id = body.assignedTechnicianIds[0] || null;
+      const prevIds: string[] = existing.assigned_technician_ids || (existing.assigned_to_id ? [existing.assigned_to_id] : []);
+      newlyAssignedIds = body.assignedTechnicianIds.filter((id: string) => !prevIds.includes(id));
+    } else if (body.assignedToId !== undefined) {
       updates.assigned_to_id = body.assignedToId;
+      updates.assigned_technician_ids = body.assignedToId ? [body.assignedToId] : [];
+      if (body.assignedToId && body.assignedToId !== existing.assigned_to_id) {
+        newlyAssignedIds = [body.assignedToId];
+      }
     }
     if (body.completionNote !== undefined) {
       updates.completion_note = body.completionNote;
@@ -131,9 +150,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (updateErr) throw new Error(updateErr.message);
 
-    // If reassigned to a new technician, notify the new technician
-    if (body.assignedToId && body.assignedToId !== existing.assigned_to_id) {
-      const { data: newTech } = await db.from("users").select("*").eq("id", body.assignedToId).single();
+    // Notify any newly assigned technicians
+    for (const newTechId of newlyAssignedIds) {
+      const { data: newTech } = await db.from("users").select("*").eq("id", newTechId).single();
       if (newTech) {
         await notifyProjectTaskAssigned(db, updated as DbProjectTask, newTech as DbUser, user);
       }

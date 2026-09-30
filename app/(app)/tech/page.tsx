@@ -31,7 +31,10 @@ export default function TechDashboard() {
       .then((d) => {
         if (d?.tasks) {
           const userTasks = d.tasks.filter(
-            (t) => t.assigned_to_id === user?.id && t.status !== "COMPLETED" && t.status !== "CANCELLED"
+            (t: any) =>
+              (t.assigned_to_id === user?.id || (t.assigned_technician_ids && t.assigned_technician_ids.includes(user?.id))) &&
+              t.status !== "COMPLETED" &&
+              t.status !== "CANCELLED"
           );
           setMyTasks(userTasks);
         }

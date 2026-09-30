@@ -66,6 +66,7 @@ export interface DbProjectTask {
   status: ProjectTaskStatus;
   progress: number;
   assigned_to_id: string | null;
+  assigned_technician_ids?: string[] | null;
   created_by_id: string | null;
   completion_note: string | null;
   completed_at: string | null;

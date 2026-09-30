@@ -14,7 +14,8 @@ const createTaskSchema = z.object({
   goal: z.string().min(1, "Task goal/description is required").max(3000),
   deadline: z.string().refine((d) => !isNaN(Date.parse(d)), "Invalid deadline date format"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
-  assignedToId: z.string().uuid("Invalid technician ID").nullable().optional()
+  assignedToId: z.string().uuid("Invalid technician ID").nullable().optional(),
+  assignedTechnicianIds: z.array(z.string().uuid("Invalid technician ID")).optional()
 });
 
 export async function GET(req: NextRequest) {
@@ -36,10 +37,6 @@ export async function GET(req: NextRequest) {
       query = query.eq("status", statusFilter);
     }
 
-    if (techIdFilter && techIdFilter !== "ALL") {
-      query = query.eq("assigned_to_id", techIdFilter);
-    }
-
     const { data: rawTasks, error } = await query;
     if (error) throw new Error(error.message);
 
@@ -47,11 +44,26 @@ export async function GET(req: NextRequest) {
     const { data: rawUsers } = await db.from("users").select("*");
     const usersMap = new Map((rawUsers ?? []).map((u: any) => [u.id, u]));
 
-    const tasks = (rawTasks ?? []).map((t: any) => ({
-      ...t,
-      assigned_to: t.assigned_to_id ? usersMap.get(t.assigned_to_id) || null : null,
-      created_by: t.created_by_id ? usersMap.get(t.created_by_id) || null : null
-    }));
+    let tasks = (rawTasks ?? []).map((t: any) => {
+      const assignedTechIds: string[] = (t.assigned_technician_ids && t.assigned_technician_ids.length > 0)
+        ? t.assigned_technician_ids
+        : (t.assigned_to_id ? [t.assigned_to_id] : []);
+      const assignedTechnicians = assignedTechIds.map((id: string) => usersMap.get(id)).filter(Boolean);
+
+      return {
+        ...t,
+        assigned_to: t.assigned_to_id ? usersMap.get(t.assigned_to_id) || null : (assignedTechnicians[0] || null),
+        assigned_technicians: assignedTechnicians,
+        created_by: t.created_by_id ? usersMap.get(t.created_by_id) || null : null
+      };
+    });
+
+    if (techIdFilter && techIdFilter !== "ALL") {
+      tasks = tasks.filter((t: any) =>
+        t.assigned_to_id === techIdFilter ||
+        (t.assigned_technician_ids && t.assigned_technician_ids.includes(techIdFilter))
+      );
+    }
 
     // Calculate metrics
     const now = new Date().getTime();
@@ -64,8 +76,13 @@ export async function GET(req: NextRequest) {
     // Active tasks count by technician
     const activeTasksByTech = new Map<string, number>();
     for (const t of tasks) {
-      if (t.assigned_to_id && t.status !== "COMPLETED" && t.status !== "CANCELLED") {
-        activeTasksByTech.set(t.assigned_to_id, (activeTasksByTech.get(t.assigned_to_id) || 0) + 1);
+      if (t.status !== "COMPLETED" && t.status !== "CANCELLED") {
+        const ids: string[] = (t.assigned_technician_ids && t.assigned_technician_ids.length > 0)
+          ? t.assigned_technician_ids
+          : (t.assigned_to_id ? [t.assigned_to_id] : []);
+        for (const techId of ids) {
+          activeTasksByTech.set(techId, (activeTasksByTech.get(techId) || 0) + 1);
+        }
       }
     }
 
@@ -225,6 +242,11 @@ export async function POST(req: NextRequest) {
       if (adonay) assigner = adonay;
     }
 
+    const assignedIds: string[] = (body.assignedTechnicianIds && body.assignedTechnicianIds.length > 0)
+      ? body.assignedTechnicianIds
+      : (body.assignedToId ? [body.assignedToId] : []);
+    const primaryLeadId = assignedIds[0] || null;
+
     const { data: task, error } = await db
       .from("project_tasks")
       .insert({
@@ -234,7 +256,8 @@ export async function POST(req: NextRequest) {
         priority: body.priority,
         status: "PENDING",
         progress: 0,
-        assigned_to_id: body.assignedToId ?? null,
+        assigned_to_id: primaryLeadId,
+        assigned_technician_ids: assignedIds,
         created_by_id: assigner.id
       })
       .select("*")
@@ -242,9 +265,9 @@ export async function POST(req: NextRequest) {
 
     if (error || !task) throw new Error(error?.message || "Failed to create task");
 
-    // If assigned to a technician, send them an instant Telegram alert
-    if (task.assigned_to_id) {
-      const { data: tech } = await db.from("users").select("*").eq("id", task.assigned_to_id).single();
+    // Send instant Telegram alert to ALL assigned technicians!
+    for (const techId of assignedIds) {
+      const { data: tech } = await db.from("users").select("*").eq("id", techId).single();
       if (tech) {
         await notifyProjectTaskAssigned(db, task as DbProjectTask, tech as DbUser, assigner);
       }
