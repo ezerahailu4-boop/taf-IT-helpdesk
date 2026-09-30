@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
     const csatResponseRate = resolved > 0 ? Math.round((csatCount / resolved) * 100) : 0;
 
     // Team technician breakdown (uses allTickets so selecting a single technician does NOT zero out everyone else!)
-    const staffUsers = (rawUsers ?? []).filter((u: any) => u.role === "TECHNICIAN" || u.role === "ADMIN");
+    const staffUsers = (rawUsers ?? []).filter((u: any) => (u.role === "TECHNICIAN" || u.role === "ADMIN") && u.is_active !== false);
     const team = staffUsers.map((tech: any) => {
       const assigned = allTickets.filter((t) => t.assigned_technician_id === tech.id);
       const active = assigned.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status)).length;

@@ -177,7 +177,7 @@ function seedData(): MockDbStore {
   const userEmployeeId = "user-employee-ezera";
   const userTechDanielId = "user-tech-daniel";
   const userTechMichaelId = "user-tech-michael";
-  const userTechSamuelId = "user-tech-samuel";
+  const userTechIbrahimId = "user-tech-ibrahim";
   const userAdminSarahId = "user-admin-sarah";
 
   const catNetwork = "cat-network";
@@ -266,7 +266,7 @@ function seedData(): MockDbStore {
         last_active_at: isoNow
       },
       {
-        id: userTechSamuelId,
+        id: userTechIbrahimId,
         telegram_id: 7434354672,
         telegram_username: "Ik8927",
         first_name: "Ibrahim",
