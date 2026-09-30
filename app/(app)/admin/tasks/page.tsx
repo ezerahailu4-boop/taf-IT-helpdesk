@@ -862,15 +862,6 @@ function ProjectTasksContent() {
                   </div>
                 )}
 
-                {data?.smartDispatch?.recommendedReason && (
-                  <div className="p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-start gap-2 shadow-xs">
-                    <span className="text-sm">⚡</span>
-                    <div>
-                      <span className="font-extrabold uppercase tracking-wider text-[10px] block">Smart Dispatch Engine</span>
-                      <span>{data.smartDispatch.recommendedReason}</span>
-                    </div>
-                  </div>
-                )}
                 <p className="text-[10px] text-slate-500">
                   Every assigned technician will immediately receive a direct notification on Telegram with task objectives and workbench links.
                 </p>
