@@ -58,12 +58,22 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
       if (byUsername) matchedUser = byUsername;
     }
 
+function cleanName(val: string | null | undefined): string {
+  if (!val) return "";
+  return val.replace(/😘+/gu, "").trim();
+}
+
     if (matchedUser) {
+      const rawFirstName = tgUser.first_name ?? matchedUser.first_name;
+      const rawLastName = tgUser.last_name ?? matchedUser.last_name;
+      const cleanFirstName = cleanName(rawFirstName) || "User";
+      const cleanLastName = cleanName(rawLastName);
+
       const updateData: Record<string, unknown> = {
         telegram_id: tgUser.id,
         telegram_username: tgUser.username ?? matchedUser.telegram_username,
-        first_name: tgUser.first_name ?? matchedUser.first_name,
-        last_name: tgUser.last_name ?? matchedUser.last_name,
+        first_name: cleanFirstName,
+        last_name: cleanLastName,
         photo_url: tgUser.photo_url ?? matchedUser.photo_url,
         language_code: tgUser.language_code ?? matchedUser.language_code,
         last_active_at: new Date().toISOString()
@@ -89,8 +99,8 @@ export async function requireUser(req: NextRequest): Promise<DbUser> {
       .insert({
         telegram_id: tgUser.id,
         telegram_username: tgUser.username,
-        first_name: tgUser.first_name,
-        last_name: tgUser.last_name,
+        first_name: cleanName(tgUser.first_name) || "User",
+        last_name: cleanName(tgUser.last_name),
         photo_url: tgUser.photo_url,
         language_code: tgUser.language_code,
         role: isDesignatedAdmin ? "ADMIN" : isDesignatedTech ? "TECHNICIAN" : "EMPLOYEE",

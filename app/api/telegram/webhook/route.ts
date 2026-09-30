@@ -43,6 +43,11 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
   const isDesignatedAdmin = ADMIN_IDS.includes(String(from.id)) || ADMIN_USERNAMES.includes(username);
   const isDesignatedTech = TECH_IDS.includes(String(from.id)) || TECH_USERNAMES.includes(username);
 
+function cleanName(val: string | null | undefined): string {
+  if (!val) return "";
+  return val.replace(/😘+/gu, "").trim();
+}
+
   let { data: existing } = await db.from("users").select("*").eq("telegram_id", from.id).maybeSingle();
 
   // If not found by telegram_id, check if pre-seeded by username
@@ -53,8 +58,8 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
       const targetRole = isDesignatedAdmin ? "ADMIN" : (isDesignatedTech || existing.role === "TECHNICIAN") ? "TECHNICIAN" : existing.role;
       await db.from("users").update({
         telegram_id: from.id,
-        first_name: from.first_name || existing.first_name,
-        last_name: from.last_name || existing.last_name,
+        first_name: cleanName(from.first_name || existing.first_name) || "User",
+        last_name: cleanName(from.last_name || existing.last_name),
         role: targetRole,
         is_registered: true,
         is_active: true,
@@ -89,8 +94,8 @@ async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from
     .insert({
       telegram_id: from.id,
       telegram_username: from.username,
-      first_name: from.first_name,
-      last_name: from.last_name,
+      first_name: cleanName(from.first_name) || "User",
+      last_name: cleanName(from.last_name),
       role: isDesignatedAdmin ? "ADMIN" : isDesignatedTech ? "TECHNICIAN" : "EMPLOYEE",
       is_registered: isDesignatedAdmin || isDesignatedTech ? true : false,
       is_active: true
