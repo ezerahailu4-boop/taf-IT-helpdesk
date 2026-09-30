@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const deptMap = new Map((rawDepts ?? []).map((d: any) => [d.id, d.name]));
     const catMap = new Map((rawCats ?? []).map((c: any) => [c.id, c]));
 
-    let all = ((rawTickets ?? []) as DbTicket[]).map((t: any) => {
+    const allTickets = ((rawTickets ?? []) as DbTicket[]).map((t: any) => {
       const reqUser: any = usersMap.get(t.requester_id);
       const techUser: any = t.assigned_technician_id ? usersMap.get(t.assigned_technician_id) : null;
       const deptName = t.department_id ? deptMap.get(t.department_id) || "Other" : "General";
@@ -44,9 +44,10 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Filter by technician if selected
+    // Filter by technician if selected (only applies to dashboard KPIs and ticket list)
+    let filteredTickets = allTickets;
     if (selectedTechId && selectedTechId !== "all") {
-      all = all.filter((t) => t.assigned_technician_id === selectedTechId);
+      filteredTickets = filteredTickets.filter((t) => t.assigned_technician_id === selectedTechId);
     }
 
     // Filter by timeframe
@@ -62,9 +63,9 @@ export async function GET(req: NextRequest) {
       startDate.setDate(now.getDate() - 30);
     }
 
-    const filteredTickets = startDate
-      ? all.filter((t) => new Date(t.created_at) >= startDate!)
-      : all;
+    if (startDate) {
+      filteredTickets = filteredTickets.filter((t) => new Date(t.created_at) >= startDate!);
+    }
 
     const total = filteredTickets.length;
     const open = filteredTickets.filter((t) => ["NEW", "ASSIGNED"].includes(t.status)).length;
@@ -74,9 +75,9 @@ export async function GET(req: NextRequest) {
     const critical = filteredTickets.filter((t) => t.priority === "CRITICAL" && !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status)).length;
     const overdue = filteredTickets.filter((t) => t.resolution_due_at && new Date(t.resolution_due_at) < now && !t.resolved_at).length;
 
-    const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 100;
+    const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : null;
 
-    // SLA & Time metrics
+    // SLA & Time metrics (calculate genuinely without hardcoded fake numbers)
     let responseSumMin = 0;
     let responseCount = 0;
     let resSumMin = 0;
@@ -105,9 +106,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const avgResponseMinutes = responseCount > 0 ? Math.round(responseSumMin / responseCount) : 15;
-    const avgResolutionHours = resCount > 0 ? +(resSumMin / resCount / 60).toFixed(1) : 1.2;
-    const slaComplianceRate = slaTotal > 0 ? Math.round((slaMet / slaTotal) * 100) : 100;
+    const avgResponseMinutes = responseCount > 0 ? Math.round(responseSumMin / responseCount) : null;
+    const avgResolutionHours = resCount > 0 ? +(resSumMin / resCount / 60).toFixed(1) : null;
+    const slaComplianceRate = slaTotal > 0 ? Math.round((slaMet / slaTotal) * 100) : null;
 
     // CSAT Metrics
     let csatSum = 0;
@@ -118,13 +119,13 @@ export async function GET(req: NextRequest) {
         csatCount++;
       }
     }
-    const csatAverage = csatCount > 0 ? +(csatSum / csatCount).toFixed(1) : 4.9;
+    const csatAverage = csatCount > 0 ? +(csatSum / csatCount).toFixed(1) : null;
     const csatResponseRate = resolved > 0 ? Math.round((csatCount / resolved) * 100) : 0;
 
-    // Team technician breakdown
+    // Team technician breakdown (uses allTickets so selecting a single technician does NOT zero out everyone else!)
     const staffUsers = (rawUsers ?? []).filter((u: any) => u.role === "TECHNICIAN" || u.role === "ADMIN");
     const team = staffUsers.map((tech: any) => {
-      const assigned = all.filter((t) => t.assigned_technician_id === tech.id);
+      const assigned = allTickets.filter((t) => t.assigned_technician_id === tech.id);
       const active = assigned.filter((t) => !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status)).length;
       const techResolved = assigned.filter((t) => ["RESOLVED", "CLOSED"].includes(t.status)).length;
       const techRatings = assigned.filter((t: any) => t.rating && t.rating >= 1).map((t: any) => Number(t.rating));
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
 
-      const count = all.filter((t) => {
+      const count = filteredTickets.filter((t) => {
         const ct = new Date(t.created_at);
         return ct >= start && ct <= end;
       }).length;
@@ -183,7 +184,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Critical tickets for quick triage
-    const criticalTickets = all.filter(
+    const criticalTickets = allTickets.filter(
       (t) => t.priority === "CRITICAL" && !["RESOLVED", "CLOSED", "CANCELLED"].includes(t.status)
     );
 

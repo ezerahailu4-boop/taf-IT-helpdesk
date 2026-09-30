@@ -29,11 +29,11 @@ interface OverviewData {
     resolved: number;
     critical: number;
     overdue: number;
-    resolutionRate: number;
-    avgResponseMinutes: number;
-    avgResolutionHours: number;
-    slaComplianceRate: number;
-    csatAverage?: number;
+    resolutionRate: number | null;
+    avgResponseMinutes: number | null;
+    avgResolutionHours: number | null;
+    slaComplianceRate: number | null;
+    csatAverage?: number | null;
     csatCount?: number;
     csatResponseRate?: number;
   };
@@ -345,9 +345,11 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-              {loading ? "…" : `${data?.counts.resolutionRate ?? 100}%`}
+              {loading ? "…" : data?.counts.resolutionRate !== null && data?.counts.resolutionRate !== undefined ? `${data.counts.resolutionRate}%` : "—"}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{data?.counts.resolved ?? 0} closed/resolved</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {(data?.counts.total ?? 0) === 0 ? "No tickets yet" : `${data?.counts.resolved ?? 0} closed/resolved`}
+            </p>
           </div>
         </div>
 
@@ -358,9 +360,11 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-black text-amber-500">
-              {loading ? "…" : `${data?.counts.csatAverage ?? 4.9} ★`}
+              {loading ? "…" : data?.counts.csatAverage ? `${data.counts.csatAverage} ★` : "—"}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{data?.counts.csatResponseRate ?? 0}% response rate</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {data?.counts.csatCount ? `${data.counts.csatResponseRate ?? 0}% response rate (${data.counts.csatCount} reviews)` : "No ratings yet"}
+            </p>
           </div>
         </div>
 
@@ -384,10 +388,14 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-              {loading ? "…" : `${data?.counts.slaComplianceRate ?? 100}%`}
+              {loading ? "…" : data?.counts.slaComplianceRate !== null && data?.counts.slaComplianceRate !== undefined ? `${data.counts.slaComplianceRate}%` : "—"}
             </p>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              {(data?.counts.overdue ?? 0) === 0 ? "Zero breached SLAs" : `${data?.counts.overdue} breached tickets`}
+              {data?.counts.slaComplianceRate === null
+                ? "No SLA tracked tickets"
+                : (data?.counts.overdue ?? 0) === 0
+                ? "Zero breached SLAs"
+                : `${data?.counts.overdue} breached tickets`}
             </p>
           </div>
         </div>
@@ -399,9 +407,11 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-black text-cyan-600 dark:text-cyan-400">
-              {loading ? "…" : `${data?.counts.avgResponseMinutes ?? 15}m`}
+              {loading ? "…" : data?.counts.avgResponseMinutes !== null && data?.counts.avgResponseMinutes !== undefined ? `${data.counts.avgResponseMinutes}m` : "—"}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">First technician reply</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {data?.counts.avgResponseMinutes !== null && data?.counts.avgResponseMinutes !== undefined ? "First technician reply" : "No replies yet"}
+            </p>
           </div>
         </div>
 
@@ -412,9 +422,11 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-3">
             <p className="text-2xl font-black text-purple-600 dark:text-purple-400">
-              {loading ? "…" : `${data?.counts.avgResolutionHours ?? 1.2}h`}
+              {loading ? "…" : data?.counts.avgResolutionHours !== null && data?.counts.avgResolutionHours !== undefined ? `${data.counts.avgResolutionHours}h` : "—"}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Time to close/fix</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {data?.counts.avgResolutionHours !== null && data?.counts.avgResolutionHours !== undefined ? "Time to close/fix" : "No closures yet"}
+            </p>
           </div>
         </div>
       </div>
