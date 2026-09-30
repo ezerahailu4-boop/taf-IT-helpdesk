@@ -730,43 +730,21 @@ function ProjectTasksContent() {
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="font-bold text-slate-700 dark:text-slate-300 text-xs sm:text-sm block">
-                      Assign Lead Technician(s) <span className="text-indigo-500 font-semibold">(One or More)</span>
+                      Assign Technician(s) <span className="text-indigo-500 font-semibold">(One or More)</span>
                     </label>
                     <p className="text-[11px] text-slate-500">
-                      Select one or more technicians to lead this task. Each will receive direct Telegram alerts.
+                      Select one or more technicians to assign to this task. Each will receive direct Telegram alerts.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {data?.smartDispatch?.recommendedTechId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (data.smartDispatch?.recommendedTechId) {
-                            const recId = data.smartDispatch.recommendedTechId;
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              assignedTechnicianIds: prev.assignedTechnicianIds.includes(recId)
-                                ? prev.assignedTechnicianIds
-                                : [recId, ...prev.assignedTechnicianIds]
-                            }));
-                          }
-                        }}
-                        className="text-[11px] font-bold px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-all flex items-center gap-1 shadow-xs active:scale-95"
-                      >
-                        <span>⚡</span>
-                        <span>+ Best Match</span>
-                      </button>
-                    )}
-                    {createForm.assignedTechnicianIds.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setCreateForm((prev) => ({ ...prev, assignedTechnicianIds: [] }))}
-                        className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-white px-1.5"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
+                  {createForm.assignedTechnicianIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCreateForm((prev) => ({ ...prev, assignedTechnicianIds: [] }))}
+                      className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-white px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium shrink-0"
+                    >
+                      Clear All
+                    </button>
+                  )}
                 </div>
 
                 {/* Candidate Technicians Multi-Select Grid */}
@@ -774,7 +752,6 @@ function ProjectTasksContent() {
                   {data?.technicians.map((t) => {
                     const idx = createForm.assignedTechnicianIds.indexOf(t.id);
                     const isSelected = idx !== -1;
-                    const isLead = idx === 0;
 
                     return (
                       <div
@@ -808,16 +785,7 @@ function ProjectTasksContent() {
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0 ml-2">
-                          {isSelected && (
-                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-                              isLead
-                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
-                                : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20"
-                            }`}>
-                              {isLead ? "👑 Lead" : "🤝 Co-Lead"}
-                            </span>
-                          )}
-                          <div className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] font-black transition-colors ${
+                          <div className={`w-5 h-5 rounded-md border flex items-center justify-center text-xs font-black transition-colors ${
                             isSelected
                               ? "bg-indigo-600 text-white border-indigo-600"
                               : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
@@ -836,16 +804,15 @@ function ProjectTasksContent() {
                     <span className="text-[11px] font-bold text-slate-500">
                       Selected ({createForm.assignedTechnicianIds.length}):
                     </span>
-                    {createForm.assignedTechnicianIds.map((id, index) => {
+                    {createForm.assignedTechnicianIds.map((id) => {
                       const tech = data?.technicians.find((t) => t.id === id);
                       if (!tech) return null;
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
                         >
-                          <span>{index === 0 ? "👑" : "🤝"}</span>
-                          <span>{tech.first_name}</span>
+                          <span>{tech.first_name} {tech.last_name || ""}</span>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -931,8 +898,8 @@ function ProjectTasksContent() {
               <div className="flex items-center justify-between gap-2">
                 <span className="opacity-60 block text-[10px] uppercase font-bold">
                   {selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 1
-                    ? `Assigned Lead Technicians (${selectedTaskDetail.task.assigned_technicians.length}):`
-                    : "Assigned Lead Technician:"}
+                    ? `Assigned Technicians (${selectedTaskDetail.task.assigned_technicians.length}):`
+                    : "Assigned Technician:"}
                 </span>
 
                 {!isEditingAssignees ? (
@@ -948,7 +915,7 @@ function ProjectTasksContent() {
                     className="px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-900/40 flex items-center gap-1 transition-all active:scale-95"
                   >
                     <span>✏️</span>
-                    <span>Reassign / Add Leads</span>
+                    <span>Reassign / Add Technicians</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-1.5">
@@ -977,12 +944,11 @@ function ProjectTasksContent() {
                   <div>
                     {selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5 mt-1">
-                        {selectedTaskDetail.task.assigned_technicians.map((tech: any, idx: number) => (
+                        {selectedTaskDetail.task.assigned_technicians.map((tech: any) => (
                           <span
                             key={tech.id}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-xs"
                           >
-                            <span>{idx === 0 ? "👑" : "🤝"}</span>
                             <span>{tech.first_name} {tech.last_name || ""}</span>
                             {tech.telegram_username && (
                               <span className="opacity-70 font-normal font-mono text-[10px]">@{tech.telegram_username}</span>
@@ -1018,12 +984,11 @@ function ProjectTasksContent() {
               ) : (
                 <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700/60">
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Select one or more lead technicians. The first engineer selected will act as Primary Lead (👑), and additional engineers as Co-Leads (🤝).
+                    Select one or more technicians to assign to this task.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
                     {data?.technicians.map((t) => {
-                      const idx = editAssigneeIds.indexOf(t.id);
-                      const isSelected = idx !== -1;
+                      const isSelected = editAssigneeIds.includes(t.id);
                       return (
                         <div
                           key={t.id}
@@ -1048,20 +1013,9 @@ function ProjectTasksContent() {
                             {t.first_name?.[0] || "T"}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-800 dark:text-slate-200 truncate text-xs">
-                                {t.first_name} {t.last_name || ""}
-                              </span>
-                              {isSelected && (
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
-                                  idx === 0
-                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
-                                    : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700"
-                                }`}>
-                                  {idx === 0 ? "👑 Lead" : "🤝 Co-Lead"}
-                                </span>
-                              )}
-                            </div>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate text-xs block">
+                              {t.first_name} {t.last_name || ""}
+                            </span>
                             <span className="text-[10px] text-slate-400 font-mono block truncate">
                               @{t.telegram_username || "tech"} • {t.activeTasksCount} active
                             </span>
