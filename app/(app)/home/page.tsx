@@ -44,32 +44,47 @@ export default function EmployeeHome() {
         </span>
       </Link>
 
-      {/* Primary Actions Grid */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* Primary Action: Report Problem */}
+      <div>
         <Link
           href="/create"
-          className="card p-3.5 flex flex-col items-center justify-center text-center gap-1.5 border hover:scale-105 transition-all group"
-          style={{ borderColor: "rgba(0,0,0,0.06)" }}
+          className="card p-4 flex items-center justify-between gap-3 border hover:border-indigo-500/40 hover:scale-[1.01] transition-all group shadow-xs"
+          style={{ borderColor: "rgba(0,0,0,0.08)" }}
         >
-          <span className="text-2xl group-hover:scale-110 transition-transform">🛠</span>
-          <span className="font-bold text-xs leading-tight">Report Problem</span>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+              🛠
+            </span>
+            <div className="text-left">
+              <span className="font-bold text-sm block leading-tight">Report Problem</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">Submit a new IT incident or request support</span>
+            </div>
+          </div>
+          <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shrink-0">
+            + New Ticket
+          </span>
         </Link>
-        <Link
-          href="/create"
-          className="card p-3.5 flex flex-col items-center justify-center text-center gap-1.5 border hover:scale-105 transition-all group"
-          style={{ borderColor: "rgba(0,0,0,0.06)" }}
-        >
-          <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
-          <span className="font-bold text-xs leading-tight">Request Service</span>
-        </Link>
-        <Link
-          href="/help"
-          className="card p-3.5 flex flex-col items-center justify-center text-center gap-1.5 border hover:scale-105 transition-all group"
-          style={{ borderColor: "rgba(0,0,0,0.06)" }}
-        >
-          <span className="text-2xl group-hover:scale-110 transition-transform">📚</span>
-          <span className="font-bold text-xs leading-tight">Help Center</span>
-        </Link>
+
+        {/* Commented out per request: Request Service and Help Center
+        <div className="grid grid-cols-2 gap-2.5 mt-2.5">
+          <Link
+            href="/create"
+            className="card p-3.5 flex flex-col items-center justify-center text-center gap-1.5 border hover:scale-105 transition-all group"
+            style={{ borderColor: "rgba(0,0,0,0.06)" }}
+          >
+            <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
+            <span className="font-bold text-xs leading-tight">Request Service</span>
+          </Link>
+          <Link
+            href="/help"
+            className="card p-3.5 flex flex-col items-center justify-center text-center gap-1.5 border hover:scale-105 transition-all group"
+            style={{ borderColor: "rgba(0,0,0,0.06)" }}
+          >
+            <span className="text-2xl group-hover:scale-110 transition-transform">📚</span>
+            <span className="font-bold text-xs leading-tight">Help Center</span>
+          </Link>
+        </div>
+        */}
       </div>
 
       {/* Ticket Status Summary Card */}
