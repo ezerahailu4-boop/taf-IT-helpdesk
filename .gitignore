@@ -38,6 +38,7 @@ yarn-error.log*
 # System Files
 .DS_Store
 *.pem
+*.tsbuildinfo
 Thumbs.db
 
 .vercel

@@ -14,6 +14,13 @@ interface TechMember {
   telegram_username: string | null;
   photo_url: string | null;
   role: string;
+  activeTasksCount?: number;
+  activeTicketsCount?: number;
+  workloadScore?: number;
+  avgRating?: number | null;
+  ratingCount?: number;
+  capacityStatus?: "OPTIMAL" | "LIGHT" | "MODERATE" | "BUSY";
+  isRecommended?: boolean;
 }
 
 interface TaskWithDetails extends DbProjectTask {
@@ -32,6 +39,11 @@ interface TasksResponse {
     completionRate: number;
   };
   technicians: TechMember[];
+  smartDispatch?: {
+    recommendedTechId: string | null;
+    recommendedTechName: string | null;
+    recommendedReason: string;
+  };
 }
 
 interface TaskDetailResponse {
@@ -85,21 +97,60 @@ function ProjectTasksContent() {
   const [submittingReport, setSubmittingReport] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
 
-  const fetchTasks = async () => {
+  // Live Sync & SLA Sweep States
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+  const [triggeringSla, setTriggeringSla] = useState(false);
+  const [slaFeedback, setSlaFeedback] = useState<string | null>(null);
+
+  const fetchTasks = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
+      setIsSyncing(true);
       const res = await api<TasksResponse>("/api/admin/tasks");
       setData(res);
+      setLastSyncedAt(new Date());
     } catch (err) {
       console.error("Failed to load tasks:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
     fetchTasks();
+
+    // ⚡ Feature 4: Live Real-Time Polling Sync every 10s
+    const interval = setInterval(() => {
+      fetchTasks(true);
+    }, 10000);
+
+    // ⚡ Refetch on window focus
+    const onFocus = () => fetchTasks(true);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
+
+  const handleTriggerSlaSweep = async () => {
+    setTriggeringSla(true);
+    setSlaFeedback(null);
+    try {
+      const res: any = await api("/api/cron/sla-sweep", { method: "POST" });
+      setSlaFeedback(res.summary || "SLA & deadline sweep executed successfully!");
+      await fetchTasks(true);
+      setTimeout(() => setSlaFeedback(null), 7000);
+    } catch (err: any) {
+      setSlaFeedback(err.message || "Failed to trigger SLA sweep");
+      setTimeout(() => setSlaFeedback(null), 5000);
+    } finally {
+      setTriggeringSla(false);
+    }
+  };
 
   // Open detail if taskId query parameter is passed
   useEffect(() => {
@@ -251,14 +302,22 @@ function ProjectTasksContent() {
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 rounded-3xl shadow-xl border border-indigo-500/20 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 tracking-wider uppercase">
                 🎯 Projects & Deployments
               </span>
-              <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Live Dispatch
-              </span>
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>Live Sync Active</span>
+              </div>
+              <button
+                onClick={() => fetchTasks(false)}
+                title="Refresh tasks data immediately"
+                className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] bg-white/10 hover:bg-white/20 text-slate-200 transition-all font-semibold active:scale-95"
+              >
+                <span className={`inline-block transition-transform ${isSyncing ? "animate-spin" : ""}`}>🔄</span>
+                <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>
+              </button>
             </div>
             <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white">
               IT Project Tasks & Infrastructure Goals
@@ -277,6 +336,18 @@ function ProjectTasksContent() {
               <span>New Project Task</span>
             </button>
 
+            {isAdmin && (
+              <button
+                onClick={handleTriggerSlaSweep}
+                disabled={triggeringSla}
+                title="Trigger immediate automated SLA & deadline sweep across tickets & project tasks"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 backdrop-blur-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                <span>{triggeringSla ? "⏳" : "🚨"}</span>
+                <span>{triggeringSla ? "Sweeping SLA..." : "Trigger SLA Sweep"}</span>
+              </button>
+            )}
+
             <Link
               href="/admin"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm"
@@ -294,6 +365,17 @@ function ProjectTasksContent() {
             </Link>
           </div>
         </div>
+
+        {/* SLA Sweep Live Feedback Alert */}
+        {slaFeedback && (
+          <div className="bg-indigo-900/80 border border-indigo-400/50 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs text-indigo-200 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🚨</span>
+              <span className="font-semibold">{slaFeedback}</span>
+            </div>
+            <button onClick={() => setSlaFeedback(null)} className="text-slate-400 hover:text-white text-xs px-2 py-1">✕</button>
+          </div>
+        )}
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-3 border-t border-white/10">
@@ -556,22 +638,53 @@ function ProjectTasksContent() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  Assign Lead Technician <span className="text-indigo-500">(Instant Telegram Alert)</span>
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+                    Assign Lead Technician <span className="text-indigo-500 font-medium">(Instant Telegram Alert)</span>
+                  </label>
+                  {data?.smartDispatch?.recommendedTechId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (data.smartDispatch?.recommendedTechId) {
+                          setCreateForm({ ...createForm, assignedToId: data.smartDispatch.recommendedTechId });
+                        }
+                      }}
+                      className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <span>⚡</span>
+                      <span>Auto-Assign Best Tech</span>
+                    </button>
+                  )}
+                </div>
                 <select
                   value={createForm.assignedToId}
                   onChange={(e) => setCreateForm({ ...createForm, assignedToId: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none font-medium text-xs sm:text-sm"
                 >
                   <option value="">👤 (Unassigned - Assign Later)</option>
-                  {data?.technicians.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      👨‍💻 {t.first_name} {t.last_name || ""} (@{t.telegram_username || "tech"})
-                    </option>
-                  ))}
+                  {data?.technicians.map((t) => {
+                    const badge = t.isRecommended ? "⭐ " : "";
+                    const recText = t.isRecommended ? " — (Best Match • Recommended)" : "";
+                    const loadText = t.activeTasksCount !== undefined ? ` • ${t.activeTasksCount} active tasks` : "";
+                    const starText = t.avgRating ? ` • ${t.avgRating}★` : "";
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {badge}{t.first_name} {t.last_name || ""} (@{t.telegram_username || "tech"}){loadText}{starText}{recText}
+                      </option>
+                    );
+                  })}
                 </select>
+                {data?.smartDispatch?.recommendedReason && (
+                  <div className="p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-start gap-2 shadow-xs">
+                    <span className="text-sm">⚡</span>
+                    <div>
+                      <span className="font-extrabold uppercase tracking-wider text-[10px] block">Smart Dispatch Engine</span>
+                      <span>{data.smartDispatch.recommendedReason}</span>
+                    </div>
+                  </div>
+                )}
                 <p className="text-[10px] text-slate-500">
                   The assigned technician will immediately receive a direct notification on Telegram with task objectives and workbench links.
                 </p>

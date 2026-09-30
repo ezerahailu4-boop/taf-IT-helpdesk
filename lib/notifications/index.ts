@@ -184,21 +184,158 @@ export async function notifyCriticalToAdmins(db: SupabaseClient, ticket: DbTicke
   }
 }
 
-export async function notifySlaWarning(db: SupabaseClient, ticket: DbTicket, technician: DbUser) {
-  await sendMessage(technician.telegram_id, `⏰ SLA at risk on ${ticket.ticket_number}: "${ticket.subject}"`, {
-    buttons: [[miniAppButton("Open Ticket", `/tickets/${ticket.id}`)]]
+export async function notifySlaWarning(
+  db: SupabaseClient,
+  ticket: DbTicket,
+  technician: DbUser,
+  remainingText?: string
+) {
+  if (!technician?.telegram_id) return;
+  const timeLeft = remainingText || "Less than 20% resolution window remaining";
+  const text =
+    `⏰ <b>SLA RESOLUTION WARNING</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `⏳ <b>Time Remaining:</b> <code>${timeLeft}</code>\n` +
+    `\n<i>Urgent action needed to resolve before deadline breach!</i>`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [[miniAppButton("🎫 Open Ticket Now", `/tickets/${ticket.id}`)]],
+    parseMode: "HTML"
+  });
+  await log(db, technician.id, ticket.id, "SLA_WARNING", "SLA resolution warning sent", text);
+}
+
+export async function notifySlaBreach(
+  db: SupabaseClient,
+  ticket: DbTicket,
+  technician: DbUser
+) {
+  const techName = `${technician.first_name ?? "Technician"} ${technician.last_name ?? ""}`.trim();
+  const techText =
+    `🚨 <b>SLA RESOLUTION BREACHED!</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `\n🔥 <i>The agreed SLA resolution window has elapsed. Escalation alert has been triggered to IT Admins.</i>`;
+
+  if (technician?.telegram_id) {
+    await sendMessage(technician.telegram_id, techText, {
+      buttons: [[miniAppButton("🎫 Resolve Ticket Immediately", `/tickets/${ticket.id}`)]],
+      parseMode: "HTML"
+    });
+  }
+
+  const adminText =
+    `🚨 <b>CRITICAL: TICKET SLA ESCALATION BREACH</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `👨‍💻 <b>Assigned Tech:</b> ${techName} (@${technician.telegram_username || "tech"})\n` +
+    `\n⚠️ <i>Ticket is unresolved and past SLA due date. Admin intervention required.</i>`;
+
+  const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
+  for (const admin of admins ?? []) {
+    if ((admin as DbUser).telegram_id) {
+      await sendMessage((admin as DbUser).telegram_id, adminText, {
+        buttons: [[miniAppButton("🛡️ Inspect Ticket in Admin", `/tickets/${ticket.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+
+  await log(db, technician.id, ticket.id, "SLA_BREACH", "SLA resolution breach escalated", adminText);
+}
+
+export async function notifyProjectTaskDeadlineWarning(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  technician: DbUser,
+  hoursRemaining: number
+) {
+  if (!technician?.telegram_id) return;
+  const deadlineStr = new Date(task.deadline).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  const text =
+    `⚠️ <b>PROJECT TASK DEADLINE APPROACHING</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `⏳ <b>Deadline:</b> <code>${deadlineStr}</code> (<b>~${Math.max(1, Math.round(hoursRemaining))}h remaining</b>)\n` +
+    `📊 <b>Current Progress:</b> <b>${task.progress}%</b> (${task.status.replace(/_/g, " ")})\n` +
+    `⚡ <b>Priority:</b> <b>${task.priority}</b>\n` +
+    `\n<i>Please ensure all deliverable milestones are met or submit a progress report before the deadline.</i>`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [
+      [miniAppButton("📋 Update Progress Report", `/admin/tasks?taskId=${task.id}`)]
+    ],
+    parseMode: "HTML"
   });
 }
 
-export async function notifySlaBreach(db: SupabaseClient, ticket: DbTicket, technician: DbUser) {
-  await sendMessage(technician.telegram_id, `🔥 SLA BREACHED on ${ticket.ticket_number}: "${ticket.subject}"`, {
-    buttons: [[miniAppButton("Open Ticket", `/tickets/${ticket.id}`)]]
+export async function notifyProjectTaskDeadlineBreach(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  technician: DbUser
+) {
+  const deadlineStr = new Date(task.deadline).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
   });
+  const techName = `${technician.first_name ?? "Technician"} ${technician.last_name ?? ""}`.trim();
+
+  // Notify technician
+  if (technician?.telegram_id) {
+    const techText =
+      `🚨 <b>PROJECT TASK DEADLINE OVERDUE!</b>\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+      `⏳ <b>Due Date:</b> <code>${deadlineStr}</code>\n` +
+      `📊 <b>Progress:</b> <b>${task.progress}%</b> (Incomplete)\n` +
+      `⚡ <b>Priority:</b> <b>${task.priority}</b>\n` +
+      `\n🔥 <i>The targeted delivery deadline has expired. This task has been escalated to IT Admin oversight.</i>`;
+
+    await sendMessage(technician.telegram_id, techText, {
+      buttons: [
+        [miniAppButton("📋 Complete & Submit Report", `/admin/tasks?taskId=${task.id}`)]
+      ],
+      parseMode: "HTML"
+    });
+  }
+
+  // Notify IT Admins
+  const adminText =
+    `🚨 <b>TASK DEADLINE BREACH ESCALATION</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `🎯 <b>Goal:</b> ${task.goal}\n` +
+    `👨‍💻 <b>Lead Tech:</b> ${techName} (@${technician.telegram_username || "tech"})\n` +
+    `⏳ <b>Deadline Was:</b> <code>${deadlineStr}</code> (OVERDUE)\n` +
+    `📊 <b>Status / Progress:</b> <b>${task.progress}%</b> (${task.status})\n` +
+    `⚡ <b>Priority:</b> <b>${task.priority}</b>\n` +
+    `\n⚠️ <i>Task is overdue without completion. Immediate review recommended.</i>`;
+
   const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
   for (const admin of admins ?? []) {
-    await sendMessage((admin as DbUser).telegram_id, `🔥 SLA breach: ${ticket.ticket_number}`, {
-      buttons: [[miniAppButton("View Ticket", `/tickets/${ticket.id}`)]]
-    });
+    if ((admin as DbUser).telegram_id && String((admin as DbUser).telegram_id) !== String(technician.telegram_id)) {
+      await sendMessage((admin as DbUser).telegram_id, adminText, {
+        buttons: [[miniAppButton("📋 Review in Task Console", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      });
+    }
   }
 }
 
