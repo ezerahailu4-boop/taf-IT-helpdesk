@@ -27,7 +27,7 @@ export default function EmployeeHome() {
           👋 Hello, {loading ? "…" : user?.first_name ?? "there"}
         </h1>
         <p className="text-xs mt-0.5" style={{ color: "var(--tg-theme-hint-color,#999)" }}>
-          How can Company IT Support help you today?
+          How can TAF IT Support help you today?
         </p>
       </div>
 

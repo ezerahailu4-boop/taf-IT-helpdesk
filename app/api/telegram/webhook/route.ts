@@ -183,7 +183,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     if (!isProperlyRegistered) {
       await sendMessage(
         chatId,
-        `👋 <b>Welcome to Company IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: abebe kebede</i>`,
+        `👋 <b>Welcome to TAF IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: abebe kebede</i>`,
         { parseMode: "HTML" }
       );
       return;
@@ -213,7 +213,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
 
     await sendMessage(
       chatId,
-      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>!${isStaff ? ` (Role: <b>${user.role}</b>)` : ""}\nHow can we help you today?\n\n<i>(To update your official name anytime, reply with <code>/name Your Name</code>)</i>`,
+      `👋 <b>Welcome to TAF IT Support</b>\nHello, <b>${fullName}</b>!${isStaff ? ` (Role: <b>${user.role}</b>)` : ""}\nHow can we help you today?\n\n<i>(To update your official name anytime, reply with <code>/name Your Name</code>)</i>`,
       {
         parseMode: "HTML",
         buttons

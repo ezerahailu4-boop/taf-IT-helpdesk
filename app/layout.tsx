@@ -3,8 +3,8 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IT Support",
-  description: "Company IT Helpdesk"
+  title: "TAF IT Support",
+  description: "TAF IT Helpdesk"
 };
 
 export const viewport: Viewport = {

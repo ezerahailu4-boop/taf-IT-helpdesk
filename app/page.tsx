@@ -31,7 +31,7 @@ export default function RootPage() {
 
       <div className="space-y-1.5 max-w-sm">
         <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
-          Company IT Helpdesk
+          TAF IT Helpdesk
         </h1>
         <p className="text-xs text-slate-500">
           {loading && !timedOut ? "Connecting to your workspace..." : "Select your IT workspace to continue:"}
