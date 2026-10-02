@@ -112,9 +112,35 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   const from = message.from;
   const user = await upsertUserFromTelegram(db, from);
 
-  // 1. Explicit /name or /register command
-  if (text.startsWith("/name") || text.startsWith("/register")) {
-    const rawName = text.replace(/^\/(name|register)/i, "").trim();
+  // Determine if user has already set an official real name (not just Telegram nickname)
+  const isProperlyRegistered = Boolean(
+    user.is_registered &&
+    user.first_name &&
+    user.first_name !== from.first_name &&
+    user.last_name
+  );
+
+  // 1. Check if message is a name submission:
+  // - Explicit: /name <name> or /register <name>
+  // - Custom slash name: e.g. /test test or /abebe kebede
+  // - Free text from unregistered user (not a system command)
+  const lowerText = text.toLowerCase();
+  const isExplicitNameCmd = lowerText.startsWith("/name") || lowerText.startsWith("/register");
+
+  const slashWords = text.startsWith("/") ? text.slice(1).split(/\s+/).filter(Boolean) : [];
+  const knownSystemCmds = ["start", "help", "mytickets", "newticket", "support", "tech", "admin"];
+  const isCustomSlashName = text.startsWith("/") && slashWords.length >= 2 && !knownSystemCmds.includes(slashWords[0].toLowerCase());
+
+  const isFreeTextName = !text.startsWith("/") && !isProperlyRegistered;
+
+  if (isExplicitNameCmd || isCustomSlashName || isFreeTextName) {
+    let rawName = text;
+    if (isExplicitNameCmd) {
+      rawName = text.replace(/^\/(name|register)\s*/i, "").trim();
+    } else if (isCustomSlashName) {
+      rawName = text.slice(1).trim();
+    }
+
     if (!rawName) {
       await sendMessage(
         chatId,
@@ -123,7 +149,8 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
       );
       return;
     }
-    const parts = rawName.split(/\s+/);
+
+    const parts = rawName.split(/\s+/).filter(Boolean);
     const firstName = parts[0] || "";
     const lastName = parts.slice(1).join(" ") || "";
 
@@ -137,21 +164,23 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
 
     await sendMessage(
       chatId,
-      `✅ <b>Profile Updated!</b>\n\nYour official name is now registered as:\n👤 <b>${firstName} ${lastName}</b>\nTelegram: @${from.username || "none"}\nID: <code>#${from.id}</code>\n\nOur IT team will see your official name on all your tickets.`,
+      `✅ <b>Registration Successful!</b>\n\nWelcome, <b>${firstName} ${lastName}</b>!\nYour official IT employee profile is now connected.\n\nTechnicians will now see your official name on all your support requests.`,
       {
         parseMode: "HTML",
         buttons: [
           [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
-          [miniAppButton("🎫 My Tickets", "/tickets")]
+          [miniAppButton("🎫 My Tickets", "/tickets")],
+          [miniAppButton("📚 Help Center", "/help")]
         ]
       }
     );
     return;
   }
 
-  // 2. If user is NOT yet registered
-  if (!user.is_registered) {
-    if (text.startsWith("/start")) {
+  // 2. /start command
+  if (text.startsWith("/start")) {
+    // If not properly registered with a real name yet, prompt for Full Name
+    if (!isProperlyRegistered) {
       await sendMessage(
         chatId,
         `👋 <b>Welcome to Company IT Support!</b>\n\nTo ensure our IT technicians and managers can identify you on tickets, please reply with your <b>Full Name</b> (First & Last Name):\n\n<i>Example: abebe kebede</i>`,
@@ -160,41 +189,8 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
       return;
     }
 
-    // Free text: treat as full name registration
-    if (!text.startsWith("/")) {
-      const parts = text.split(/\s+/);
-      const firstName = parts[0] || "";
-      const lastName = parts.slice(1).join(" ") || "";
-
-      await db.from("users").update({
-        first_name: firstName,
-        last_name: lastName,
-        is_registered: true,
-        telegram_username: from.username || user.telegram_username,
-        last_active_at: new Date().toISOString()
-      }).eq("id", user.id);
-
-      await sendMessage(
-        chatId,
-        `✅ <b>Registration Successful!</b>\n\nWelcome, <b>${firstName} ${lastName}</b>!\nYour IT employee profile is now connected.\n\nTechnicians will now see your official name on all your support requests.`,
-        {
-          parseMode: "HTML",
-          buttons: [
-            [miniAppButton("🛠 Open IT Helpdesk", user?.role === "ADMIN" ? "/admin" : user?.role === "TECHNICIAN" ? "/tech" : "/home")],
-            [miniAppButton("🎫 My Tickets", "/tickets")],
-            [miniAppButton("📚 Help Center", "/help")]
-          ]
-        }
-      );
-      return;
-    }
-  }
-
-  // 3. User is registered
-  const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || from.first_name || "Employee";
-
-  if (text.startsWith("/start")) {
     const isStaff = user?.role === "ADMIN" || user?.role === "TECHNICIAN";
+    const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || from.first_name || "Employee";
     const buttons =
       user?.role === "ADMIN"
         ? [
@@ -217,7 +213,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
 
     await sendMessage(
       chatId,
-      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>!${isStaff ? ` (Role: <b>${user.role}</b>)` : ""}\nHow can we help you today?\n\n<i>(To update your name anytime, send <code>/name Your Name</code>)</i>`,
+      `👋 <b>Welcome to Company IT Support</b>\nHello, <b>${fullName}</b>!${isStaff ? ` (Role: <b>${user.role}</b>)` : ""}\nHow can we help you today?\n\n<i>(To update your official name anytime, reply with <code>/name Your Name</code>)</i>`,
       {
         parseMode: "HTML",
         buttons
@@ -225,6 +221,8 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     );
     return;
   }
+
+  const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || from.first_name || "Employee";
 
   if (text.startsWith("/help")) {
     await sendMessage(chatId, "Need help? Open the Help Center in the app, or describe your issue with /newticket.", {

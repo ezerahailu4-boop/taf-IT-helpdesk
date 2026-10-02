@@ -31,6 +31,29 @@ export default function EmployeeHome() {
         </p>
       </div>
 
+      {/* Unregistered / Missing Name Banner */}
+      {!loading && user && (!user.is_registered || !user.last_name) && (
+        <Link
+          href="/profile"
+          className="card p-3.5 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-transparent border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 block hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">👤</span>
+            <div>
+              <p className="font-bold text-xs text-amber-900 dark:text-amber-200">
+                Confirm Your Official Employee Name
+              </p>
+              <p className="text-[11px] text-amber-800/80 dark:text-amber-300">
+                Please set your first & last name so IT technicians can identify your tickets.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shrink-0 shadow-sm">
+            Set Name →
+          </span>
+        </Link>
+      )}
+
       {/* Quick Search Shortcut */}
       <Link
         href="/search"
