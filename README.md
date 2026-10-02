@@ -35,20 +35,11 @@ backed by a Telegram bot for notifications and a Next.js + Supabase backend.
 
 ## What's intentionally left as a starting point, not faked as complete
 
-- **Reports/charts** (section 33) and the full **audit log viewer** (section
-  34) — the data is already being recorded (`audit_logs`, and you can query
-  `tickets`/`ticket_status_history` directly); building the charts UI is a
-  couple more screens following the same pattern as `admin/page.tsx`.
-- **Departments / locations / support groups / categories / SLA policy CRUD
-  screens** — these are seeded and fully functional in the schema and API
-  layer, but admin only edits them via the DB or Supabase Studio for now
-  (the `/admin/settings` page shows where to extend this).
-- **Automatic assignment rules UI** (section 26) — the `automation_rules`
-  table exists; wiring it into ticket creation is a small addition to
-  `app/api/tickets/route.ts`.
-- **Asset ↔ ticket detail view / asset history** — assets can be created and
-  listed; linking a ticket to an asset is already in the create-ticket API
-  schema, but the "related tickets" view on an asset page isn't built yet.
+- **Export capabilities** — while reports and audit lists are viewable in the admin interface, there are no built-in export functions (CSV/PDF) for reports, audit logs, or ticket lists; organizations may want to add export functionality for external analysis or record-keeping.
+- **Custom theming & branding** — the Mini App adapts to Telegram's native theme for seamless integration, but doesn't include additional theming options or organizational branding customization beyond Telegram's provided color scheme.
+- **Department/location hierarchies & complex routing** — basic department and support group management is complete, but advanced organizational structures (sub-departments, location-based routing) or complex SLA matrices would require additional configuration.
+- **Knowledge base enhancements** — the help center is functional with search and categories; additional features like article ratings, contribution workflows, or AI-powered suggestions could be added.
+- **Integration extensions** — while core Telegram bot and Mini App are complete, organizations may wish to add integrations with other tools (email ticketing, SIEM systems, or CRM platforms).
 
 None of the above are placeholder screens that pretend to work — they simply
 don't exist yet, so you don't get a false sense of completeness.
