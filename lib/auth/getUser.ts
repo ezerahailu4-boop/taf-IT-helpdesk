@@ -64,10 +64,17 @@ function cleanName(val: string | null | undefined): string {
 }
 
     if (matchedUser) {
-      const rawFirstName = tgUser.first_name ?? matchedUser.first_name;
-      const rawLastName = tgUser.last_name ?? matchedUser.last_name;
-      const cleanFirstName = cleanName(rawFirstName) || "User";
-      const cleanLastName = cleanName(rawLastName);
+      // If the user has already registered their official employee name, preserve it!
+      // Do NOT overwrite it with their Telegram profile display name / handle (e.g. "Heisenberg").
+      const hasRegisteredName = Boolean(matchedUser.is_registered && matchedUser.first_name);
+
+      const cleanFirstName = hasRegisteredName
+        ? matchedUser.first_name
+        : (cleanName(tgUser.first_name) || "User");
+
+      const cleanLastName = hasRegisteredName
+        ? (matchedUser.last_name ?? "")
+        : cleanName(tgUser.last_name);
 
       const updateData: Record<string, unknown> = {
         telegram_id: tgUser.id,

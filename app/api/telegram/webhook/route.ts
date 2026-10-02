@@ -56,10 +56,11 @@ function cleanName(val: string | null | undefined): string {
     if (byUsername) {
       existing = byUsername;
       const targetRole = isDesignatedAdmin ? "ADMIN" : (isDesignatedTech || existing.role === "TECHNICIAN") ? "TECHNICIAN" : existing.role;
+      const hasRegisteredName = Boolean(existing.is_registered && existing.first_name);
       await db.from("users").update({
         telegram_id: from.id,
-        first_name: cleanName(from.first_name || existing.first_name) || "User",
-        last_name: cleanName(from.last_name || existing.last_name),
+        first_name: hasRegisteredName ? existing.first_name : (cleanName(from.first_name || existing.first_name) || "User"),
+        last_name: hasRegisteredName ? (existing.last_name ?? "") : cleanName(from.last_name || existing.last_name),
         role: targetRole,
         is_registered: true,
         is_active: true,
