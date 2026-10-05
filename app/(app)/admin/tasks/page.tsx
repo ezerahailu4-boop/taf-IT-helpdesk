@@ -490,16 +490,14 @@ function ProjectTasksContent() {
               </button>
             )}
 
-            {isAdmin && (
-              <button
-                onClick={handleExportCSV}
-                title="Export filtered project tasks as CSV"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm active:scale-95"
-              >
-                <span>📥</span>
-                <span>Export CSV</span>
-              </button>
-            )}
+            <button
+              onClick={handleExportCSV}
+              title="Export filtered project tasks as CSV"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm active:scale-95"
+            >
+              <span>📥</span>
+              <span>Export CSV</span>
+            </button>
 
             <Link
               href="/admin"
@@ -642,16 +640,14 @@ function ProjectTasksContent() {
             className="text-xs rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 w-36 sm:w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
 
-          {isAdmin && (
-            <button
-              onClick={handleExportCSV}
-              title="Export currently filtered tasks to CSV spreadsheet"
-              className="px-2.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 shrink-0"
-            >
-              <span>📥</span>
-              <span className="hidden sm:inline">Export</span>
-            </button>
-          )}
+          <button
+            onClick={handleExportCSV}
+            title="Export currently filtered tasks to CSV spreadsheet"
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-all flex items-center gap-1.5 shrink-0 shadow-xs active:scale-95"
+          >
+            <span>📥</span>
+            <span>Export CSV</span>
+          </button>
         </div>
       </div>
 
