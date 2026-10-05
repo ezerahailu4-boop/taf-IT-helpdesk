@@ -56,6 +56,7 @@ export interface DbTicket {
 
 export type ProjectTaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "CANCELLED";
 export type ProjectTaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type ProjectTaskCategory = "PLANNED" | "UNPLANNED";
 
 export interface DbProjectTask {
   id: string;
@@ -63,6 +64,7 @@ export interface DbProjectTask {
   goal: string;
   deadline: string;
   priority: ProjectTaskPriority;
+  category?: ProjectTaskCategory;
   status: ProjectTaskStatus;
   progress: number;
   assigned_to_id: string | null;

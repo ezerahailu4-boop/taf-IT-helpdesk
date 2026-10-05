@@ -387,6 +387,7 @@ export async function notifyProjectTaskAssigned(
     `━━━━━━━━━━━━━━━━━━\n` +
     `📋 <b>Task:</b> <b>${task.title}</b>\n` +
     `🎯 <b>Goal:</b> ${task.goal}\n` +
+    `🏷️ <b>Category:</b> <b>${task.category === "UNPLANNED" ? "⚡ Unplanned" : "📅 Planned"}</b>\n` +
     `⚡ <b>Priority:</b> <b>${task.priority}</b>\n` +
     `📅 <b>Deadline:</b> <code>${deadlineStr}</code>\n` +
     (adminUser ? `👤 <b>Assigned By:</b> ${adminUser.first_name || "Admin"} (@${adminUser.telegram_username || "admin"})\n` : "") +

@@ -14,6 +14,7 @@ const createTaskSchema = z.object({
   goal: z.string().min(1, "Task goal/description is required").max(3000),
   deadline: z.string().refine((d) => !isNaN(Date.parse(d)), "Invalid deadline date format"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+  category: z.enum(["PLANNED", "UNPLANNED"]).default("PLANNED"),
   assignedToId: z.string().uuid("Invalid technician ID").nullable().optional(),
   assignedTechnicianIds: z.array(z.string().uuid("Invalid technician ID")).optional()
 });
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get("status");
     const techIdFilter = searchParams.get("techId");
+    const categoryFilter = searchParams.get("category");
 
     let query = db
       .from("project_tasks")
@@ -35,6 +37,10 @@ export async function GET(req: NextRequest) {
 
     if (statusFilter && statusFilter !== "ALL") {
       query = query.eq("status", statusFilter);
+    }
+
+    if (categoryFilter && categoryFilter !== "ALL") {
+      query = query.eq("category", categoryFilter);
     }
 
     const { data: rawTasks, error } = await query;
@@ -254,6 +260,7 @@ export async function POST(req: NextRequest) {
         goal: body.goal.trim(),
         deadline: new Date(body.deadline).toISOString(),
         priority: body.priority,
+        category: body.category || "PLANNED",
         status: "PENDING",
         progress: 0,
         assigned_to_id: primaryLeadId,

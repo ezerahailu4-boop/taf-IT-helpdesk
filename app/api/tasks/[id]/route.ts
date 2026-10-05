@@ -14,6 +14,7 @@ const patchTaskSchema = z.object({
   goal: z.string().min(5).max(3000).optional(),
   deadline: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
+  category: z.enum(["PLANNED", "UNPLANNED"]).optional(),
   status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().min(0).max(100).optional(),
   assignedToId: z.string().uuid().nullable().optional(),
@@ -109,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.goal !== undefined) updates.goal = body.goal.trim();
     if (body.deadline !== undefined) updates.deadline = new Date(body.deadline).toISOString();
     if (body.priority !== undefined) updates.priority = body.priority;
+    if (body.category !== undefined) updates.category = body.category;
     if (body.status !== undefined) {
       updates.status = body.status;
       if (body.status === "COMPLETED") {

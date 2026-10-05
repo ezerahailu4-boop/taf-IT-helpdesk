@@ -254,11 +254,20 @@ export default function TechDashboard() {
                   className="group bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-400/40 p-4 rounded-2xl transition-all flex flex-col justify-between space-y-3"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-extrabold text-xs text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
-                      {t.title}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                        t.category === "UNPLANNED"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                          : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                      }`}>
+                        {t.category === "UNPLANNED" ? "⚡ Unplanned" : "📅 Planned"}
+                      </span>
+                      <span className="font-extrabold text-xs text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
+                        {t.title}
+                      </span>
+                    </div>
                     <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
                         isOverdue
                           ? "bg-red-500/20 text-red-300 border-red-500/30 animate-pulse"
                           : "bg-slate-800 text-slate-300 border-slate-700"
