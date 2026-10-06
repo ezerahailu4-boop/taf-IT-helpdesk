@@ -33,6 +33,7 @@ export function useTelegram() {
       try {
         tg.ready?.();
         tg.expand?.();
+        tg.disableVerticalSwipes?.();
         const data = tg.initData || "";
         if (data) {
           setInitData(data);

@@ -312,6 +312,22 @@ function seedData(): MockDbStore {
         is_active: true,
         created_at: oneDayAgo,
         last_active_at: isoNow
+      },
+      {
+        id: "user-admin-kalkidan",
+        telegram_id: 205797800,
+        telegram_username: "kalkidangebyehu",
+        first_name: "Kalkidan",
+        last_name: "Gebeyehu",
+        photo_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+        phone: "+251 91 000 0007",
+        role: "ADMIN",
+        department_id: deptIT,
+        location_id: locHeadOffice,
+        support_group_id: sgNetwork,
+        is_active: true,
+        created_at: oneDayAgo,
+        last_active_at: isoNow
       }
     ],
     departments: [

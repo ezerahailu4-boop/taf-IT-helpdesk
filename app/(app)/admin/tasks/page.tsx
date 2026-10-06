@@ -183,6 +183,17 @@ function ProjectTasksContent() {
     }
   }, [initialTaskId]);
 
+  // Lock background scroll on mobile when modal is active
+  useEffect(() => {
+    if (showCreateModal || selectedTaskDetail) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = origOverflow;
+      };
+    }
+  }, [showCreateModal, selectedTaskDetail]);
+
   const openTaskDetail = async (id: string) => {
     setLoadingDetail(true);
     try {
@@ -797,22 +808,31 @@ function ProjectTasksContent() {
 
       {/* MODAL: CREATE PROJECT TASK */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 my-8 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCreateModal(false);
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 pt-3 sm:pt-6 pb-6 overflow-y-auto overscroll-contain safe-top safe-bottom"
+        >
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[calc(100dvh-2.5rem)] sm:max-h-[85vh] my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-150 overflow-hidden shrink-0">
+            {/* Modal Header (Pinned) */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0 bg-white dark:bg-slate-900 sticky top-0 z-10">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🎯</span>
                 <h2 className="font-black text-base text-slate-900 dark:text-white">Create New Project Task</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold"
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold transition-colors active:scale-95"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
+            {/* Modal Scrollable Form Body */}
+            <form onSubmit={handleCreateTask} className="overflow-y-auto p-4 sm:p-5 space-y-4 text-xs flex-1 overscroll-contain touch-pan-y">
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
                   Subject / Task Title <span className="text-red-500">*</span>
@@ -1041,11 +1061,16 @@ function ProjectTasksContent() {
 
       {/* MODAL: TASK DETAIL & TECHNICIAN REPORT DRAWER */}
       {selectedTaskDetail && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 my-8 animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="space-y-1">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedTaskDetail(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 pt-3 sm:pt-6 pb-6 overflow-y-auto overscroll-contain safe-top safe-bottom"
+        >
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[calc(100dvh-2.5rem)] sm:max-h-[85vh] my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-150 overflow-hidden shrink-0">
+            {/* Modal Header (Pinned at top) */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0 bg-white dark:bg-slate-900 sticky top-0 z-10">
+              <div className="space-y-1.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
                     (selectedTaskDetail.task.category === "UNPLANNED")
@@ -1065,21 +1090,25 @@ function ProjectTasksContent() {
                     Deadline: {formatDeadline(selectedTaskDetail.task.deadline).dateFormatted} ({formatDeadline(selectedTaskDetail.task.deadline).relative})
                   </span>
                 </div>
-                <h2 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
+                <h2 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white leading-snug break-words">
                   {selectedTaskDetail.task.title}
                 </h2>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedTaskDetail(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold shrink-0"
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold shrink-0 transition-colors active:scale-95 ml-2"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            {/* Goal & Scope Description */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1 text-xs">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-indigo-600 dark:text-indigo-400">Target Objectives & Deliverables</span>
+            {/* Modal Body (Scrollable, never pushes header off-screen) */}
+            <div className="overflow-y-auto p-4 sm:p-5 space-y-4 flex-1 overscroll-contain touch-pan-y">
+              {/* Goal & Scope Description */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1 text-xs">
+                <span className="font-bold uppercase tracking-wider text-[10px] text-indigo-600 dark:text-indigo-400">Target Objectives & Deliverables</span>
               <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                 {selectedTaskDetail.task.goal}
               </p>
@@ -1372,6 +1401,7 @@ function ProjectTasksContent() {
                 )}
               </button>
             </form>
+            </div>
           </div>
         </div>
       )}

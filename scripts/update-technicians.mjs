@@ -144,6 +144,19 @@ async function main() {
     WHERE telegram_id = '2074368152' OR telegram_username ILIKE 'ezrsh_404';
   `, [itDeptId, defaultSgId]);
 
+  // 6. Kalkidan Gebeyehu (@kalkidangebyehu)
+  console.log('6. Updating Kalkidan Gebeyehu (@kalkidangebyehu)...');
+  await pool.query(`
+    UPDATE users 
+    SET 
+      role = 'ADMIN',
+      department_id = COALESCE($1, department_id),
+      support_group_id = COALESCE($2, support_group_id),
+      is_active = true,
+      is_registered = true
+    WHERE telegram_id = '205797800' OR telegram_username ILIKE 'kalkidangebyehu';
+  `, [itDeptId, defaultSgId]);
+
   // Deactivate old placeholder 1004 (Samuel)
   await pool.query(`UPDATE users SET is_active = false WHERE telegram_id = '1004'`);
 

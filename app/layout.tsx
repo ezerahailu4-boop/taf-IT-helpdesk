@@ -33,7 +33,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 const sdata = sp.get('tgWebAppData') || sp.get('initData');
                 if (sdata) sessionStorage.setItem('tg_init_data', sdata);
 
-                // 2. Initialize theme
+                // 2. Expand WebApp & prevent vertical sheet pull-to-close
+                if (window.Telegram && window.Telegram.WebApp) {
+                  try {
+                    window.Telegram.WebApp.ready();
+                    window.Telegram.WebApp.expand();
+                    if (window.Telegram.WebApp.disableVerticalSwipes) {
+                      window.Telegram.WebApp.disableVerticalSwipes();
+                    }
+                  } catch (e) {}
+                }
+
+                // 3. Initialize theme
                 const saved = localStorage.getItem('it_helpdesk_theme');
                 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 if (saved === 'dark' || (!saved && prefersDark)) {
