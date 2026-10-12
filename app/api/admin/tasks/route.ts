@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
     const now = new Date().getTime();
     const total = tasks.length;
     const completed = tasks.filter((t: any) => t.status === "COMPLETED").length;
+    const awaitingApproval = tasks.filter((t: any) => t.status === "WAITING_FOR_ADMIN").length;
     const inProgress = tasks.filter((t: any) => t.status === "IN_PROGRESS").length;
     const pending = tasks.filter((t: any) => t.status === "PENDING").length;
     const overdue = tasks.filter((t: any) => t.status !== "COMPLETED" && new Date(t.deadline).getTime() < now).length;
@@ -210,6 +211,7 @@ export async function GET(req: NextRequest) {
       metrics: {
         total,
         completed,
+        awaitingApproval,
         inProgress,
         pending,
         overdue,

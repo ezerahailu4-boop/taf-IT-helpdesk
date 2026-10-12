@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/getUser";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { assertCanManageTicket } from "@/lib/permissions";
-import { notifyProjectTaskUpdated } from "@/lib/notifications";
+import {
+  notifyProjectTaskUpdated,
+  notifyProjectTaskAwaitingSignOff,
+  notifyProjectTaskApproved100
+} from "@/lib/notifications";
 import { errorResponse } from "@/lib/apiError";
 import type { DbProjectTask, DbUser } from "@/types/db";
 
@@ -12,7 +16,7 @@ export const dynamic = "force-dynamic";
 const submitReportSchema = z.object({
   reportText: z.string().max(4000).optional().nullable(),
   progress: z.number().min(0).max(100),
-  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED"]).default("IN_PROGRESS")
+  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "WAITING_FOR_ADMIN", "COMPLETED"]).default("IN_PROGRESS")
 });
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -34,21 +38,56 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const isCompleted = body.status === "COMPLETED" || body.progress === 100;
-    const finalProgress = isCompleted ? 100 : body.progress;
-    const finalStatus = isCompleted ? "COMPLETED" : body.status;
+    const isAdmin = user.role === "ADMIN";
+    const wantsCompleted = body.status === "COMPLETED" || body.progress === 100;
+    const wantsWaitingForAdmin = body.status === "WAITING_FOR_ADMIN";
+
+    let finalStatus = body.status;
+    let finalProgress = body.progress;
+    let isTechnicianCompletion = false;
+    let isManagerApproved = false;
+
+    if (wantsWaitingForAdmin) {
+      finalStatus = "WAITING_FOR_ADMIN";
+      finalProgress = 90;
+      isTechnicianCompletion = true;
+    } else if (wantsCompleted) {
+      if (isAdmin) {
+        // Admin confirms/approves completed -> 100% Complete!
+        finalStatus = "COMPLETED";
+        finalProgress = 100;
+        isManagerApproved = true;
+      } else {
+        // Technician says it is completed -> Task reaches 90% and awaits Admin review
+        finalStatus = "WAITING_FOR_ADMIN";
+        finalProgress = 90;
+        isTechnicianCompletion = true;
+      }
+    } else {
+      // Normal in-progress updates
+      if (!isAdmin && finalProgress >= 100) {
+        finalStatus = "WAITING_FOR_ADMIN";
+        finalProgress = 90;
+        isTechnicianCompletion = true;
+      }
+    }
+
     const now = new Date().toISOString();
     const effectiveReportText =
       body.reportText && body.reportText.trim().length > 0
         ? body.reportText.trim()
+        : isManagerApproved
+        ? "Admin verified deliverables and confirmed task is 100% completed."
+        : isTechnicianCompletion
+        ? "Technician completed all deliverables. Submitted to Admin for review (Is it completed? Yes/No)."
         : `Progress updated to ${finalProgress}% (${finalStatus.replace(/_/g, " ")})`;
 
     const initData = req.headers.get("x-telegram-init-data") || new URL(req.url).searchParams.get("initData");
     let reportingUser = user;
 
-    // In browser demo mode (outside Telegram), if task is assigned to a technician,
+    // In browser demo mode (outside Telegram), if task is assigned to a technician and current user is not admin,
     // attribute the report to the assigned technician so progress updates match the assigned lead!
-    if (!initData && task.assigned_to_id) {
+    if (!initData && task.assigned_to_id && !isAdmin) {
       const { data: assignedTech } = await db.from("users").select("*").eq("id", task.assigned_to_id).single();
       if (assignedTech) {
         reportingUser = assignedTech;
@@ -70,7 +109,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (recentDuplicate) {
       const createdMs = new Date(recentDuplicate.created_at).getTime();
       if (Date.now() - createdMs < 10000) {
-        // Return existing duplicate report without creating redundant rows or sending duplicate Telegram alerts!
         return NextResponse.json({
           report: {
             ...recentDuplicate,
@@ -114,15 +152,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     };
 
-    // 3. Update task
+    // 4. Update task
     const taskUpdates: Record<string, unknown> = {
       progress: finalProgress,
       status: finalStatus,
       updated_at: now
     };
 
-    if (isCompleted) {
+    if (isManagerApproved) {
       taskUpdates.completed_at = now;
+      taskUpdates.completion_note = effectiveReportText;
+    } else if (isTechnicianCompletion) {
       taskUpdates.completion_note = effectiveReportText;
     }
 
@@ -135,10 +175,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (updateErr) throw new Error(updateErr.message);
 
-    // 4. Notify Admin(s) via Telegram
-    await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText, isCompleted);
+    // 5. Send appropriate Telegram Notifications
+    if (isManagerApproved) {
+      // IT Manager finalized 100% completion -> Notify assigned technician(s)
+      await notifyProjectTaskApproved100(db, updatedTask as DbProjectTask, user, effectiveReportText);
+    } else if (isTechnicianCompletion) {
+      // Technician submitted completion -> Notify IT Manager(s) to sign off
+      await notifyProjectTaskAwaitingSignOff(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText);
+    } else {
+      // Regular in-progress update
+      await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText, false);
+    }
 
-    return NextResponse.json({ report: enrichedReport, task: updatedTask }, { status: 201 });
+    return NextResponse.json({
+      report: enrichedReport,
+      task: updatedTask,
+      awaitingSignOff: isTechnicianCompletion,
+      isCompleted: isManagerApproved
+    }, { status: 201 });
   } catch (err) {
     return errorResponse(err);
   }

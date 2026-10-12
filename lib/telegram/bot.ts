@@ -33,14 +33,20 @@ export function miniAppButton(text: string, path = "") {
 export async function sendMessage(
   chatId: number | string,
   text: string,
-  opts: { buttons?: InlineButton[][]; parseMode?: "HTML" | "MarkdownV2" } = {}
+  opts: {
+    buttons?: InlineButton[][];
+    parseMode?: "HTML" | "MarkdownV2";
+    replyMarkup?: Record<string, unknown>;
+  } = {}
 ) {
   const payload: Record<string, unknown> = {
     chat_id: chatId,
     text,
     parse_mode: opts.parseMode ?? "HTML"
   };
-  if (opts.buttons) {
+  if (opts.replyMarkup) {
+    payload.reply_markup = opts.replyMarkup;
+  } else if (opts.buttons) {
     payload.reply_markup = { inline_keyboard: opts.buttons };
   }
   return callTelegram("sendMessage", payload);

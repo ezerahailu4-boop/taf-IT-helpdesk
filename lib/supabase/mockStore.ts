@@ -676,6 +676,21 @@ function seedData(): MockDbStore {
         completed_at: null,
         created_at: new Date(now.getTime() - 1 * 86400000).toISOString(),
         updated_at: new Date(now.getTime() - 1 * 86400000).toISOString()
+      },
+      {
+        id: "task-103",
+        title: "Install Redundant Fiber Uplink & SFP+ Modules in Server Rack C",
+        goal: "Run OM4 multimode fiber patch cables from Distribution Switch 1 to Rack C. Verify 10Gbps link negotiation, packet loss below 0.001%, and failover convergence.",
+        deadline: new Date(now.getTime() + 2 * 86400000).toISOString(),
+        priority: "HIGH",
+        status: "WAITING_FOR_ADMIN",
+        progress: 90,
+        assigned_to_id: userTechDanielId,
+        created_by_id: userAdminSarahId,
+        completion_note: "Technician finished physical cabling and speed tests. Optical power verified within -4dBm. Ready for IT Manager sign-off.",
+        completed_at: null,
+        created_at: new Date(now.getTime() - 3 * 86400000).toISOString(),
+        updated_at: new Date(now.getTime() - 1800000).toISOString()
       }
     ],
     project_task_reports: [
@@ -687,6 +702,15 @@ function seedData(): MockDbStore {
         progress: 60,
         status: "IN_PROGRESS",
         created_at: new Date(now.getTime() - 3600000).toISOString()
+      },
+      {
+        id: "report-103",
+        task_id: "task-103",
+        technician_id: userTechDanielId,
+        report_text: "Finished physical cabling and optical link tests. Cleaned connectors and verified 10Gbps line rate. Awaiting IT Manager 100% sign-off.",
+        progress: 90,
+        status: "WAITING_FOR_ADMIN",
+        created_at: new Date(now.getTime() - 1800000).toISOString()
       }
     ],
     sla_events: []

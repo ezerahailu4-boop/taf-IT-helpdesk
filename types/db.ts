@@ -54,7 +54,7 @@ export interface DbTicket {
   updated_at: string;
 }
 
-export type ProjectTaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "CANCELLED";
+export type ProjectTaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "WAITING_FOR_ADMIN" | "COMPLETED" | "CANCELLED";
 export type ProjectTaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type ProjectTaskCategory = "PLANNED" | "UNPLANNED";
 

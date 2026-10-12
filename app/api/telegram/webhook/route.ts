@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendMessage, answerCallbackQuery, miniAppButton } from "@/lib/telegram/bot";
 import { recordStatusChange, writeAudit } from "@/lib/tickets/audit";
-import { notifyTicketAssigned, notifyTicketRated } from "@/lib/notifications";
+import {
+  notifyTicketAssigned,
+  notifyTicketRated,
+  notifyProjectTaskApproved100,
+  notifyProjectTaskRevisionsRequested
+} from "@/lib/notifications";
+import type { DbProjectTask } from "@/types/db";
 
 /**
  * Telegram calls this webhook for every update. We verify the shared secret
@@ -111,6 +117,84 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   const text: string = (message.text ?? "").trim();
   const from = message.from;
   const user = await upsertUserFromTelegram(db, from);
+
+  // Check if this admin has a pending task revision comment waiting to be submitted
+  if (user?.role === "ADMIN" && text) {
+    const { data: pendingSetting } = await db
+      .from("system_settings")
+      .select("value")
+      .eq("key", `pending_task_revision_${user.id}`)
+      .maybeSingle();
+
+    if (pendingSetting?.value?.taskId) {
+      const pendingTaskId = pendingSetting.value.taskId;
+
+      // Always clear the pending state immediately
+      await db
+        .from("system_settings")
+        .delete()
+        .eq("key", `pending_task_revision_${user.id}`);
+
+      if (text.toLowerCase() === "/cancel") {
+        await sendMessage(chatId, "↩️ <b>Review cancellation confirmed.</b> Task status remains unchanged.", {
+          parseMode: "HTML"
+        });
+        return;
+      }
+
+      const comment =
+        text.toLowerCase() === "/skip"
+          ? "Revisions required by admin before task can be completed."
+          : text;
+
+      const now = new Date().toISOString();
+      const { data: updatedTask } = await db
+        .from("project_tasks")
+        .update({
+          status: "IN_PROGRESS",
+          progress: 70,
+          completion_note: comment,
+          updated_at: now
+        })
+        .eq("id", pendingTaskId)
+        .select("*")
+        .single();
+
+      if (updatedTask) {
+        await db.from("project_task_reports").insert({
+          task_id: pendingTaskId,
+          technician_id: user.id,
+          report_text: `[Admin Review: NO] ${comment}`,
+          progress: 70,
+          status: "IN_PROGRESS"
+        });
+
+        await notifyProjectTaskRevisionsRequested(
+          db,
+          updatedTask as DbProjectTask,
+          user,
+          comment
+        );
+
+        await sendMessage(
+          chatId,
+          `↩️ <b>TASK RETURNED FOR REVISIONS (70%)</b>\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
+          `📋 <b>Task:</b> <b>${updatedTask.title}</b>\n` +
+          `👔 <b>Admin Decision:</b> <b>NO — Revisions Required</b>\n` +
+          `📝 <b>Your Feedback to Tech:</b>\n<i>"${comment}"</i>\n\n` +
+          `The assigned technician has been notified with your feedback and the task has been returned to In Progress (70%).`,
+          {
+            buttons: [[miniAppButton("📋 View Task in Console", `/admin/tasks?taskId=${pendingTaskId}`)]],
+            parseMode: "HTML"
+          }
+        );
+      } else {
+        await sendMessage(chatId, "⚠️ Task not found or already updated.");
+      }
+      return;
+    }
+  }
 
   // Determine if user has already set an official real name (not just Telegram nickname)
   const isProperlyRegistered = Boolean(
@@ -254,9 +338,190 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
 }
 
 async function handleCallback(db: ReturnType<typeof supabaseAdmin>, cb: any) {
-  const [action, ticketId] = String(cb.data ?? "").split(":");
+  const [action] = String(cb.data ?? "").split(":");
   const user = await upsertUserFromTelegram(db, cb.from);
 
+  // Handle Project Task completion sign-off / review callbacks
+  if (action === "task_review") {
+    const [, taskId, answer] = String(cb.data ?? "").split(":");
+    if (user.role !== "ADMIN") {
+      await answerCallbackQuery(cb.id, "⚠️ Only IT Admins can review and sign off tasks.");
+      return;
+    }
+
+    const { data: task, error: taskErr } = await db
+      .from("project_tasks")
+      .select("*")
+      .eq("id", taskId)
+      .single();
+
+    if (taskErr || !task) {
+      await answerCallbackQuery(cb.id, "Project task not found.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    if (answer === "yes") {
+      // Admin confirmed: YES, IT IS COMPLETED!
+      const { data: updatedTask } = await db
+        .from("project_tasks")
+        .update({
+          status: "COMPLETED",
+          progress: 100,
+          completed_at: now,
+          completion_note: "Admin verified deliverables and answered YES (Completed via Telegram).",
+          updated_at: now
+        })
+        .eq("id", task.id)
+        .select("*")
+        .single();
+
+      await db.from("project_task_reports").insert({
+        task_id: task.id,
+        technician_id: user.id,
+        report_text: "[Admin Review: YES] Admin verified deliverables and marked task 100% completed.",
+        progress: 100,
+        status: "COMPLETED"
+      });
+
+      if (updatedTask) {
+        await notifyProjectTaskApproved100(
+          db,
+          updatedTask as DbProjectTask,
+          user,
+          "Admin verified deliverables and approved 100% completion."
+        );
+      }
+
+      await answerCallbackQuery(cb.id, "✅ Confirmed! Task marked 100% completed.");
+      await sendMessage(
+        cb.from.id,
+        `✅ <b>TASK VERIFIED & COMPLETED (100%)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+        `👔 <b>Admin Decision:</b> <b>YES — Completed</b>\n\n` +
+        `The task is now officially marked 100% completed, and assigned technicians have been notified. 🎉`,
+        {
+          buttons: [[miniAppButton("🎯 View Completed Task", `/admin/tasks?taskId=${task.id}`)]],
+          parseMode: "HTML"
+        }
+      );
+      return;
+    } else {
+      // Admin answered: NO, NOT COMPLETED (NEEDS WORK)
+      // Save pending revision state to system_settings so their next message becomes the revision feedback
+      await db.from("system_settings").upsert({
+        key: `pending_task_revision_${user.id}`,
+        value: {
+          taskId: task.id,
+          title: task.title,
+          chatId: cb.from.id,
+          createdAt: now
+        },
+        updated_at: now
+      });
+
+      await answerCallbackQuery(cb.id, "📝 Please type what needs to be worked on.");
+      await sendMessage(
+        cb.from.id,
+        `⚠️ <b>TASK REVISIONS: WHAT NEEDS TO BE WORKED ON?</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `📋 <b>Task:</b> <b>${task.title}</b>\n\n` +
+        `💬 <b>Please reply with your instructions / feedback</b> explaining what work remains or needs to be revised by the technician.\n\n` +
+        `<i>Your exact comment will be sent to the assigned technician(s).</i>`,
+        {
+          buttons: [
+            [
+              { text: "⏩ Submit Default Comment", callback_data: `task_reject_skip:${task.id}` },
+              { text: "✖️ Cancel", callback_data: `task_reject_cancel:${task.id}` }
+            ]
+          ],
+          parseMode: "HTML"
+        }
+      );
+      return;
+    }
+  }
+
+  // Handle skip or cancel of the revision comment
+  if (action === "task_reject_skip" || action === "task_reject_cancel") {
+    const [, taskId] = String(cb.data ?? "").split(":");
+    // Clear pending state
+    await db
+      .from("system_settings")
+      .delete()
+      .eq("key", `pending_task_revision_${user.id}`);
+
+    if (action === "task_reject_cancel") {
+      await answerCallbackQuery(cb.id, "Rejection cancelled.");
+      await sendMessage(cb.from.id, "↩️ <b>Review rejection cancelled.</b> Task status remains unchanged.", {
+        parseMode: "HTML"
+      });
+      return;
+    }
+
+    const { data: task } = await db
+      .from("project_tasks")
+      .select("*")
+      .eq("id", taskId)
+      .single();
+
+    if (!task) {
+      await answerCallbackQuery(cb.id, "Task not found.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const defaultComment = "Revisions required by admin before task can be completed.";
+
+    const { data: updatedTask } = await db
+      .from("project_tasks")
+      .update({
+        status: "IN_PROGRESS",
+        progress: 70,
+        completion_note: defaultComment,
+        updated_at: now
+      })
+      .eq("id", task.id)
+      .select("*")
+      .single();
+
+    await db.from("project_task_reports").insert({
+      task_id: task.id,
+      technician_id: user.id,
+      report_text: `[Admin Review: NO] ${defaultComment}`,
+      progress: 70,
+      status: "IN_PROGRESS"
+    });
+
+    if (updatedTask) {
+      await notifyProjectTaskRevisionsRequested(
+        db,
+        updatedTask as DbProjectTask,
+        user,
+        defaultComment
+      );
+    }
+
+    await answerCallbackQuery(cb.id, "❌ Task returned to In Progress.");
+    await sendMessage(
+      cb.from.id,
+      `❌ <b>TASK REJECTED — RETURNED FOR REVISIONS (70%)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+      `👔 <b>Admin Decision:</b> <b>NO — Revisions Required</b>\n` +
+      `📊 <b>Progress:</b> <b>Returned to 70% (In Progress)</b>\n\n` +
+      `The assigned technician has been notified to make revisions.`,
+      {
+        buttons: [[miniAppButton("📋 View Task in Console", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      }
+    );
+    return;
+  }
+
+  const [, ticketId] = String(cb.data ?? "").split(":");
   const { data: ticket } = await db.from("tickets").select("*").eq("id", ticketId).single();
   if (!ticket) {
     await answerCallbackQuery(cb.id, "Ticket not found");

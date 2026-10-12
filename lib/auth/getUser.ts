@@ -122,8 +122,10 @@ function cleanName(val: string | null | undefined): string {
 
   // If in Dev or Demo mode and no valid Telegram initData is available:
   if (isDevOrDemo) {
-    const isAdminPath = req.nextUrl?.pathname?.includes("/admin");
-    const isTechPath = req.nextUrl?.pathname?.includes("/tech");
+    const referer = req.headers.get("referer") || "";
+    const isTechReferer = referer.includes("/tech");
+    const isAdminPath = req.nextUrl?.pathname?.includes("/admin") && !isTechReferer;
+    const isTechPath = req.nextUrl?.pathname?.includes("/tech") || isTechReferer;
     let defaultRole = isAdminPath ? "ADMIN" : isTechPath ? "TECHNICIAN" : "ADMIN"; // Default to ADMIN for dashboard access
     let targetRole = (demoRole || defaultRole).toUpperCase();
     if (!["EMPLOYEE", "TECHNICIAN", "ADMIN"].includes(targetRole)) {

@@ -434,4 +434,120 @@ export async function notifyProjectTaskUpdated(
   }
 }
 
+export async function notifyProjectTaskAwaitingSignOff(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  technician: DbUser,
+  reportText?: string
+) {
+  const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
+  if (!admins || admins.length === 0) return;
+
+  const techName = `${technician.first_name ?? "Technician"} ${technician.last_name ?? ""}`.trim();
+  const text =
+    `📋 <b>TASK COMPLETION REVIEW REQUESTED</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📌 <b>Task:</b> <b>${task.title}</b>\n` +
+    `👨‍💻 <b>Assigned Tech:</b> ${techName} (@${technician.telegram_username || "tech"})\n` +
+    `📊 <b>Reported Progress:</b> <b>100% (Fieldwork Done)</b>\n` +
+    `🏷️ <b>Category:</b> <b>${task.category === "UNPLANNED" ? "⚡ Unplanned" : "📅 Planned"}</b>\n` +
+    (reportText ? `📝 <b>Technician Note:</b>\n<i>"${reportText}"</i>\n\n` : "\n") +
+    `❓ <b>Is this task completed?</b>\n` +
+    `<i>The assigned technician marked this task as finished. Admin review required — please confirm with Yes or No below:</i>`;
+
+  for (const admin of admins) {
+    if ((admin as DbUser).telegram_id && String((admin as DbUser).telegram_id) !== String(technician.telegram_id)) {
+      await sendMessage((admin as DbUser).telegram_id, text, {
+        buttons: [
+          [
+            { text: "✅ Yes, It's Completed", callback_data: `task_review:${task.id}:yes` },
+            { text: "❌ No, Needs Work", callback_data: `task_review:${task.id}:no` }
+          ],
+          [miniAppButton("🔍 Review Task & Reports", `/admin/tasks?taskId=${task.id}`)]
+        ],
+        parseMode: "HTML"
+      });
+    }
+  }
+}
+
+export async function notifyProjectTaskApproved100(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  adminUser: DbUser,
+  approvalNote?: string
+) {
+  const assignedTechIds: string[] =
+    task.assigned_technician_ids && task.assigned_technician_ids.length > 0
+      ? task.assigned_technician_ids
+      : task.assigned_to_id
+      ? [task.assigned_to_id]
+      : [];
+
+  if (assignedTechIds.length === 0) return;
+
+  const { data: technicians } = await db.from("users").select("*").in("id", assignedTechIds);
+  if (!technicians || technicians.length === 0) return;
+
+  const adminName = `${adminUser.first_name ?? "Admin"} ${adminUser.last_name ?? ""}`.trim();
+  const text =
+    `🎉 <b>PROJECT TASK VERIFIED & 100% COMPLETED!</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `👔 <b>Reviewed By:</b> ${adminName} (@${adminUser.telegram_username || "admin"})\n` +
+    `✅ <b>Admin Decision:</b> <b>YES — Verified & Completed</b>\n` +
+    `📊 <b>Final Status:</b> <b>COMPLETED (100%)</b>\n` +
+    (approvalNote ? `📝 <b>Admin Sign-off Note:</b>\n<i>"${approvalNote}"</i>\n\n` : "\n") +
+    `🚀 <i>Great job! The Admin has officially verified all deliverables and confirmed completion.</i>`;
+
+  for (const tech of technicians) {
+    if ((tech as DbUser).telegram_id && String((tech as DbUser).telegram_id) !== String(adminUser.telegram_id)) {
+      await sendMessage((tech as DbUser).telegram_id, text, {
+        buttons: [[miniAppButton("🎯 View Completed Task", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+}
+
+export async function notifyProjectTaskRevisionsRequested(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  adminUser: DbUser,
+  revisionNote?: string
+) {
+  const assignedTechIds: string[] =
+    task.assigned_technician_ids && task.assigned_technician_ids.length > 0
+      ? task.assigned_technician_ids
+      : task.assigned_to_id
+      ? [task.assigned_to_id]
+      : [];
+
+  if (assignedTechIds.length === 0) return;
+
+  const { data: technicians } = await db.from("users").select("*").in("id", assignedTechIds);
+  if (!technicians || technicians.length === 0) return;
+
+  const adminName = `${adminUser.first_name ?? "Admin"} ${adminUser.last_name ?? ""}`.trim();
+  const text =
+    `↩️ <b>TASK REVIEW: REVISIONS REQUIRED</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Task:</b> <b>${task.title}</b>\n` +
+    `👔 <b>Reviewed By:</b> ${adminName} (@${adminUser.telegram_username || "admin"})\n` +
+    `❌ <b>Admin Decision:</b> <b>NO — Not Completed Yet</b>\n` +
+    `📊 <b>Status:</b> <b>Returned to In Progress (70%)</b>\n` +
+    (revisionNote ? `📝 <b>Feedback / Changes Needed:</b>\n<i>"${revisionNote}"</i>\n\n` : "\n") +
+    `⚠️ <i>Please review the feedback above, complete the necessary work, and resubmit for Admin review.</i>`;
+
+  for (const tech of technicians) {
+    if ((tech as DbUser).telegram_id && String((tech as DbUser).telegram_id) !== String(adminUser.telegram_id)) {
+      await sendMessage((tech as DbUser).telegram_id, text, {
+        buttons: [[miniAppButton("📋 Open Task & Update Work", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+}
+
+
 

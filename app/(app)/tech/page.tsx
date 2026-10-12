@@ -262,18 +262,25 @@ export default function TechDashboard() {
                       }`}>
                         {t.category === "UNPLANNED" ? "⚡ Unplanned" : "📅 Planned"}
                       </span>
+                      {t.status === "WAITING_FOR_ADMIN" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 animate-pulse">
+                          ⏳ Awaiting Admin Review (Yes/No)
+                        </span>
+                      )}
                       <span className="font-extrabold text-xs text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
                         {t.title}
                       </span>
                     </div>
                     <span
                       className={`text-[10px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
-                        isOverdue
+                        t.status === "WAITING_FOR_ADMIN"
+                          ? "bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold"
+                          : isOverdue
                           ? "bg-red-500/20 text-red-300 border-red-500/30 animate-pulse"
                           : "bg-slate-800 text-slate-300 border-slate-700"
                       }`}
                     >
-                      {dueText}
+                      {t.status === "WAITING_FOR_ADMIN" ? "Admin Review (Yes/No)" : dueText}
                     </span>
                   </div>
 
@@ -281,12 +288,20 @@ export default function TechDashboard() {
 
                   <div className="space-y-1">
                     <div className="flex justify-between items-center text-[10px]">
-                      <span className="text-slate-400 font-medium">Progress</span>
-                      <span className="font-mono font-bold text-indigo-400">{t.progress}%</span>
+                      <span className="text-slate-400 font-medium">
+                        {t.status === "WAITING_FOR_ADMIN" ? "Fieldwork Done (Pending Admin Decision)" : "Progress"}
+                      </span>
+                      <span className={`font-mono font-bold ${t.status === "WAITING_FOR_ADMIN" ? "text-purple-400" : "text-indigo-400"}`}>
+                        {t.progress}%
+                      </span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300"
+                        className={`h-full transition-all duration-300 ${
+                          t.status === "WAITING_FOR_ADMIN"
+                            ? "bg-gradient-to-r from-purple-500 to-indigo-400"
+                            : "bg-gradient-to-r from-indigo-500 to-emerald-400"
+                        }`}
                         style={{ width: `${t.progress}%` }}
                       />
                     </div>
@@ -294,7 +309,7 @@ export default function TechDashboard() {
 
                   <div className="flex justify-end pt-1">
                     <span className="text-[11px] font-bold text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1">
-                      <span>Post Progress & Report</span>
+                      <span>{t.status === "WAITING_FOR_ADMIN" ? "View Status & Add Notes" : "Post Progress & Report"}</span>
                       <span>→</span>
                     </span>
                   </div>

@@ -107,7 +107,7 @@ async function runSlaSweep(req: NextRequest) {
   const tasks = (rawTasks ?? []) as DbProjectTask[];
 
   for (const task of tasks) {
-    if (!task.assigned_to_id || !task.deadline) continue;
+    if (!task.assigned_to_id || !task.deadline || task.status === "WAITING_FOR_ADMIN") continue;
 
     const dueMs = new Date(task.deadline).getTime();
     if (isNaN(dueMs)) continue;

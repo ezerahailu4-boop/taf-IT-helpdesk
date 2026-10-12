@@ -34,6 +34,7 @@ interface TasksResponse {
   metrics: {
     total: number;
     completed: number;
+    awaitingApproval?: number;
     inProgress: number;
     pending: number;
     overdue: number;
@@ -63,7 +64,8 @@ const statusMeta: Record<ProjectTaskStatus, { label: string; bg: string; text: s
   PENDING: { label: "Pending", bg: "bg-slate-500/10 border-slate-500/20", text: "text-slate-600 dark:text-slate-300" },
   IN_PROGRESS: { label: "In Progress", bg: "bg-blue-500/10 border-blue-500/30", text: "text-blue-600 dark:text-blue-400" },
   BLOCKED: { label: "Blocked", bg: "bg-rose-500/10 border-rose-500/30", text: "text-rose-600 dark:text-rose-400" },
-  COMPLETED: { label: "Completed", bg: "bg-emerald-500/10 border-emerald-500/30", text: "text-emerald-600 dark:text-emerald-400" },
+  WAITING_FOR_ADMIN: { label: "Awaiting Admin Review (Yes/No)", bg: "bg-purple-500/15 dark:bg-purple-950/50 border-purple-500/30", text: "text-purple-600 dark:text-purple-300" },
+  COMPLETED: { label: "Completed (100%)", bg: "bg-emerald-500/10 border-emerald-500/30", text: "text-emerald-600 dark:text-emerald-400" },
   CANCELLED: { label: "Cancelled", bg: "bg-gray-500/10 border-gray-500/20", text: "text-gray-500" }
 };
 
@@ -120,6 +122,11 @@ function ProjectTasksContent() {
   const [isEditingAssignees, setIsEditingAssignees] = useState(false);
   const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([]);
   const [savingAssignees, setSavingAssignees] = useState(false);
+
+  // Admin Review (Yes / No) States
+  const [adminReviewNote, setAdminReviewNote] = useState("");
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
 
   // Live Sync & SLA Sweep States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -353,6 +360,33 @@ function ProjectTasksContent() {
     }
   };
 
+  const handleAdminReview = async (taskId: string, answer: "yes" | "no", note?: string) => {
+    setReviewingTaskId(taskId);
+    try {
+      await api(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          adminAnswer: answer,
+          completionNote:
+            note ||
+            (answer === "yes"
+              ? "Admin verified deliverables and answered YES: task is 100% completed."
+              : "Admin reviewed task and answered NO: task is not completed yet, revisions required.")
+        })
+      });
+      setShowRejectInput(false);
+      setAdminReviewNote("");
+      if (selectedTaskDetail?.task.id === taskId) {
+        await openTaskDetail(taskId);
+      }
+      fetchTasks(true);
+    } catch (err: any) {
+      alert(err.message || "Failed to submit review decision");
+    } finally {
+      setReviewingTaskId(null);
+    }
+  };
+
   const filteredTasks = useMemo(() => {
     if (!data?.tasks) return [];
     return data.tasks.filter((t) => {
@@ -540,7 +574,7 @@ function ProjectTasksContent() {
         )}
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-3 border-t border-white/10">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-3 border-t border-white/10">
           <div className="bg-black/30 p-3 rounded-2xl border border-white/10">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Tasks</span>
             <p className="text-xl sm:text-2xl font-black text-white">{data?.metrics.total ?? 0}</p>
@@ -552,6 +586,19 @@ function ProjectTasksContent() {
           <div className="bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20">
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Pending</span>
             <p className="text-xl sm:text-2xl font-black text-amber-400">{data?.metrics.pending ?? 0}</p>
+          </div>
+          <div className={`p-3 rounded-2xl border transition-all ${
+            (data?.metrics.awaitingApproval ?? 0) > 0
+              ? "bg-purple-500/20 border-purple-500/40 ring-1 ring-purple-500/30"
+              : "bg-purple-500/10 border-purple-500/20"
+          }`}>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1">
+              <span>⏳</span>
+              <span>Awaiting Sign-Off</span>
+            </span>
+            <p className={`text-xl sm:text-2xl font-black ${(data?.metrics.awaitingApproval ?? 0) > 0 ? "text-purple-300 animate-pulse" : "text-purple-400"}`}>
+              {data?.metrics.awaitingApproval ?? 0}
+            </p>
           </div>
           <div className={`p-3 rounded-2xl border ${data?.metrics.overdue ? "bg-red-500/20 border-red-500/30" : "bg-black/30 border-white/10"}`}>
             <span className={`text-[10px] font-bold uppercase tracking-wider ${data?.metrics.overdue ? "text-red-300" : "text-slate-400"}`}>Overdue</span>
@@ -574,17 +621,30 @@ function ProjectTasksContent() {
         {/* Status & Category Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-wrap">
           <div className="flex items-center gap-1">
-            {["ALL", "PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED"].map((st) => (
+            {["ALL", "PENDING", "IN_PROGRESS", "WAITING_FOR_ADMIN", "BLOCKED", "COMPLETED"].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                   statusFilter === st
-                    ? "bg-indigo-600 text-white shadow-sm"
+                    ? st === "WAITING_FOR_ADMIN"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "bg-indigo-600 text-white shadow-sm"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
                 }`}
               >
-                {st === "ALL" ? "All Tasks" : st.replace(/_/g, " ")}
+                <span>
+                  {st === "ALL"
+                    ? "All Tasks"
+                    : st === "WAITING_FOR_ADMIN"
+                    ? "⏳ Awaiting Manager Sign-Off"
+                    : st.replace(/_/g, " ")}
+                </span>
+                {st === "WAITING_FOR_ADMIN" && (data?.metrics.awaitingApproval ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
+                    {data?.metrics.awaitingApproval}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -697,7 +757,13 @@ function ProjectTasksContent() {
               <div
                 key={t.id}
                 onClick={() => openTaskDetail(t.id)}
-                className="group relative bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between space-y-4"
+                className={`group relative rounded-3xl p-5 border shadow-sm hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between space-y-4 ${
+                  t.status === "WAITING_FOR_ADMIN"
+                    ? "bg-purple-500/5 dark:bg-purple-950/20 border-purple-500/40 ring-1 ring-purple-500/20 shadow-purple-500/5"
+                    : isFinished
+                    ? "bg-white dark:bg-slate-900 border-emerald-500/30"
+                    : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800"
+                }`}
               >
                 {/* Top Badge Bar */}
                 <div className="flex items-center justify-between gap-2">
@@ -722,12 +788,14 @@ function ProjectTasksContent() {
                   <div className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1 ${
                     isFinished
                       ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                      : t.status === "WAITING_FOR_ADMIN"
+                      ? "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-purple-500/30 animate-pulse font-bold"
                       : dl.isOverdue
                       ? "bg-red-500/15 text-red-600 border-red-500/40 animate-pulse font-black"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
                   }`}>
-                    <span>{isFinished ? "✅" : dl.isOverdue ? "🚨" : "⏳"}</span>
-                    <span>{isFinished ? "Completed" : dl.relative}</span>
+                    <span>{isFinished ? "✅" : t.status === "WAITING_FOR_ADMIN" ? "⏳" : dl.isOverdue ? "🚨" : "⏳"}</span>
+                    <span>{isFinished ? "100% Completed" : t.status === "WAITING_FOR_ADMIN" ? "Needs IT Manager Sign-Off" : dl.relative}</span>
                   </div>
                 </div>
 
@@ -744,13 +812,27 @@ function ProjectTasksContent() {
                 {/* Progress Bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-center text-[11px]">
-                    <span className="font-semibold text-slate-500">Progress</span>
-                    <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">{t.progress}%</span>
+                    <span className="font-semibold text-slate-500">
+                      {t.status === "WAITING_FOR_ADMIN" ? "Fieldwork Completed (Pending Sign-Off)" : "Progress"}
+                    </span>
+                    <span className={`font-bold font-mono ${
+                      isFinished
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : t.status === "WAITING_FOR_ADMIN"
+                        ? "text-purple-600 dark:text-purple-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    }`}>
+                      {t.progress}%
+                    </span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        isFinished ? "bg-emerald-500" : "bg-gradient-to-r from-indigo-500 to-indigo-600"
+                        isFinished
+                          ? "bg-emerald-500"
+                          : t.status === "WAITING_FOR_ADMIN"
+                          ? "bg-gradient-to-r from-purple-500 to-indigo-600"
+                          : "bg-gradient-to-r from-indigo-500 to-indigo-600"
                       }`}
                       style={{ width: `${Math.max(5, t.progress)}%` }}
                     />
@@ -795,10 +877,39 @@ function ProjectTasksContent() {
                     )}
                   </div>
 
-                  <span className="text-indigo-600 dark:text-indigo-400 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px] shrink-0 ml-2">
-                    <span>Reports</span>
-                    <span>→</span>
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    {t.status === "WAITING_FOR_ADMIN" && isAdmin ? (
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[10px] font-bold text-purple-600 dark:text-purple-300">Is it completed?</span>
+                        <button
+                          type="button"
+                          disabled={reviewingTaskId === t.id}
+                          onClick={() => handleAdminReview(t.id, "yes")}
+                          className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50"
+                          title="Confirm: Yes, task is completed"
+                        >
+                          <span>✅ Yes</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewingTaskId === t.id}
+                          onClick={() => {
+                            const note = window.prompt("What needs to be worked on / revised by the technician?");
+                            if (note === null) return; // User cancelled prompt
+                            handleAdminReview(t.id, "no", note.trim());
+                          }}
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50"
+                          title="Answer: No, not completed (needs work)"
+                        >
+                          <span>❌ No</span>
+                        </button>
+                      </div>
+                    ) : null}
+                    <span className="text-indigo-600 dark:text-indigo-400 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 text-[11px]">
+                      <span>Reports</span>
+                      <span>→</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -1109,10 +1220,160 @@ function ProjectTasksContent() {
               {/* Goal & Scope Description */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1 text-xs">
                 <span className="font-bold uppercase tracking-wider text-[10px] text-indigo-600 dark:text-indigo-400">Target Objectives & Deliverables</span>
-              <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                {selectedTaskDetail.task.goal}
-              </p>
-            </div>
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                  {selectedTaskDetail.task.goal}
+                </p>
+              </div>
+
+              {/* 🎯 2-Stage Completion Workflow Tracker */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                    Completion Verification Workflow
+                  </span>
+                  <span className="font-mono font-bold text-[11px] text-indigo-600 dark:text-indigo-400">
+                    {selectedTaskDetail.task.status === "COMPLETED"
+                      ? "✅ 100% Complete & Signed Off"
+                      : selectedTaskDetail.task.status === "WAITING_FOR_ADMIN"
+                      ? "⏳ Step 2/2: Pending Admin Review (Yes/No)"
+                      : "🔧 Step 1/2: Fieldwork in Progress"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {/* Step 1: Technician Deliverables */}
+                  <div
+                    className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
+                      selectedTaskDetail.task.status === "WAITING_FOR_ADMIN" || selectedTaskDetail.task.status === "COMPLETED"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20"
+                        : "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300"
+                    }`}
+                  >
+                    <span className="text-xl">
+                      {selectedTaskDetail.task.status === "WAITING_FOR_ADMIN" || selectedTaskDetail.task.status === "COMPLETED"
+                        ? "✅"
+                        : "🔧"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-black text-xs leading-tight">1. Technician Work</p>
+                      <p className="text-[10px] opacity-80 truncate">
+                        {selectedTaskDetail.task.status === "WAITING_FOR_ADMIN" || selectedTaskDetail.task.status === "COMPLETED"
+                          ? "Deliverables Finished (Done)"
+                          : `In Progress (${selectedTaskDetail.task.progress}%)`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Admin Final Review (Yes / No) */}
+                  <div
+                    className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
+                      selectedTaskDetail.task.status === "COMPLETED"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20"
+                        : selectedTaskDetail.task.status === "WAITING_FOR_ADMIN"
+                        ? "bg-purple-500/15 border-purple-500/40 text-purple-700 dark:text-purple-300 animate-pulse ring-1 ring-purple-500/30"
+                        : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
+                    }`}
+                  >
+                    <span className="text-xl">
+                      {selectedTaskDetail.task.status === "COMPLETED" ? "🎉" : "👔"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-black text-xs leading-tight">2. Admin Review (Yes/No)</p>
+                      <p className="text-[10px] opacity-80 truncate">
+                        {selectedTaskDetail.task.status === "COMPLETED"
+                          ? "Approved: Confirmed Completed (100%)"
+                          : selectedTaskDetail.task.status === "WAITING_FOR_ADMIN"
+                          ? "Review Required: Answer Yes or No"
+                          : "Awaits Technician Done Report"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Completion Review (Yes / No) Banner */}
+              {selectedTaskDetail.task.status === "WAITING_FOR_ADMIN" && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 border border-purple-500/40 text-white space-y-3.5 shadow-xl">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl sm:text-3xl">👔</span>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                          Admin Review Required
+                        </span>
+                      </div>
+                      <h4 className="font-black text-sm sm:text-base text-purple-100">
+                        Is this task completed?
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {isAdmin
+                          ? "The assigned technician reported all deliverables completed. Please verify the work reports below and answer Yes or No:"
+                          : "You marked this task as done. An alert has been sent to the Admin asking 'Is it completed?'. The Admin must answer Yes or No before it is completed."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="space-y-2 pt-1 border-t border-white/10">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={reviewingTaskId === selectedTaskDetail.task.id}
+                          onClick={() => handleAdminReview(selectedTaskDetail.task.id, "yes")}
+                          className="flex-1 py-2.5 px-4 rounded-xl font-black text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          <span>✅</span>
+                          <span>Yes — It's Completed (Approve 100%)</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewingTaskId === selectedTaskDetail.task.id}
+                          onClick={() => setShowRejectInput(!showRejectInput)}
+                          className="py-2.5 px-4 rounded-xl font-bold text-xs bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <span>❌</span>
+                          <span>No — Needs Work</span>
+                        </button>
+                      </div>
+
+                      {showRejectInput && (
+                        <div className="p-3 rounded-xl bg-black/40 border border-rose-500/30 space-y-2 animate-in fade-in duration-150">
+                          <label className="text-[11px] font-bold text-rose-300 block">
+                            Rejection / Revision Instructions for Technician:
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="Explain what is incomplete or needs to be fixed before completion..."
+                            value={adminReviewNote}
+                            onChange={(e) => setAdminReviewNote(e.target.value)}
+                            className="w-full p-2 rounded-lg bg-slate-900 border border-rose-500/30 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowRejectInput(false);
+                                setAdminReviewNote("");
+                              }}
+                              className="px-2.5 py-1 text-xs text-slate-400 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={reviewingTaskId === selectedTaskDetail.task.id}
+                              onClick={() => handleAdminReview(selectedTaskDetail.task.id, "no", adminReviewNote.trim())}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow transition-all"
+                            >
+                              Confirm: Return to In Progress (70%)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
             {/* Assignee & Overall Progress Bar */}
             <div className="space-y-3 bg-slate-50/50 dark:bg-slate-800/30 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
@@ -1255,18 +1516,54 @@ function ProjectTasksContent() {
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
                   Technician Work Reports ({selectedTaskDetail.reports.length})
                 </h4>
-                {selectedTaskDetail.task.status !== "COMPLETED" ? (
+                {selectedTaskDetail.task.status === "COMPLETED" ? (
+                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <span>🎉</span>
+                    <span>Completed (100%)</span>
+                  </span>
+                ) : selectedTaskDetail.task.status === "WAITING_FOR_ADMIN" ? (
+                  isAdmin ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-purple-600 dark:text-purple-300">Is it completed?</span>
+                      <button
+                        type="button"
+                        disabled={reviewingTaskId === selectedTaskDetail.task.id}
+                        onClick={() => handleAdminReview(selectedTaskDetail.task.id, "yes")}
+                        className="px-2.5 py-1 rounded-xl text-[11px] font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <span>✅ Yes</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewingTaskId === selectedTaskDetail.task.id}
+                        onClick={() => setShowRejectInput(true)}
+                        className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <span>❌ No</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
+                      <span>⏳</span>
+                      <span>Pending Admin Review (Yes/No)</span>
+                    </span>
+                  )
+                ) : isAdmin ? (
                   <button
+                    type="button"
                     onClick={() => handleQuickStatusChange(selectedTaskDetail.task.id, "COMPLETED", 100)}
                     className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all active:scale-95"
                   >
                     ✅ Mark Task 100% Completed
                   </button>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                    <span>🎉</span>
-                    <span>Completed (100%)</span>
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickStatusChange(selectedTaskDetail.task.id, "WAITING_FOR_ADMIN", 90)}
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-purple-600 hover:bg-purple-500 text-white shadow transition-all active:scale-95"
+                  >
+                    👨‍💻 Mark Done & Request Admin Review
+                  </button>
                 )}
               </div>
 
@@ -1286,7 +1583,13 @@ function ProjectTasksContent() {
                           <span className="font-bold text-slate-800 dark:text-slate-200">
                             👨‍💻 {rep.technician ? `${rep.technician.first_name} ${rep.technician.last_name || ""}` : "Technician"}
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            rep.status === "COMPLETED"
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : rep.status === "WAITING_FOR_ADMIN"
+                              ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
+                              : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                          }`}>
                             {rep.progress}%
                           </span>
                         </div>
@@ -1311,7 +1614,11 @@ function ProjectTasksContent() {
 
               <textarea
                 rows={2}
-                placeholder="Optional: Write accomplishments, test notes, or blockers..."
+                placeholder={
+                  !isAdmin
+                    ? "Describe deliverables tested, configuration details, or blockers for the IT Manager..."
+                    : "Optional: Write manager sign-off notes, verification findings, or blockers..."
+                }
                 value={reportText}
                 onChange={(e) => setReportText(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -1332,7 +1639,11 @@ function ProjectTasksContent() {
                     onChange={(e) => {
                       const p = parseInt(e.target.value, 10);
                       setReportProgress(p);
-                      if (p === 100) setReportStatus("COMPLETED");
+                      if (isAdmin) {
+                        if (p === 100) setReportStatus("COMPLETED");
+                      } else {
+                        if (p >= 90) setReportStatus("WAITING_FOR_ADMIN");
+                      }
                     }}
                     className="w-full accent-indigo-600 cursor-pointer"
                   />
@@ -1345,17 +1656,40 @@ function ProjectTasksContent() {
                     onChange={(e) => {
                       const s = e.target.value as ProjectTaskStatus;
                       setReportStatus(s);
-                      if (s === "COMPLETED") setReportProgress(100);
+                      if (s === "COMPLETED") {
+                        if (isAdmin) {
+                          setReportProgress(100);
+                        } else {
+                          setReportStatus("WAITING_FOR_ADMIN");
+                          setReportProgress(90);
+                        }
+                      } else if (s === "WAITING_FOR_ADMIN") {
+                        setReportProgress(90);
+                      }
                     }}
                     className="w-full p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold"
                   >
                     <option value="IN_PROGRESS">🔵 In Progress</option>
                     <option value="BLOCKED">🔴 Blocked / Needs Parts</option>
-                    <option value="COMPLETED">✅ Completed (100%)</option>
+                    {isAdmin ? (
+                      <>
+                        <option value="COMPLETED">✅ Completed (100% Admin Approved)</option>
+                        <option value="WAITING_FOR_ADMIN">⏳ Awaiting Admin Review (Yes/No)</option>
+                      </>
+                    ) : (
+                      <option value="WAITING_FOR_ADMIN">👨‍💻 Work Done (Submit for Admin Review Yes/No)</option>
+                    )}
                     <option value="PENDING">⚪ Pending</option>
                   </select>
                 </div>
               </div>
+
+              {reportStatus === "WAITING_FOR_ADMIN" && !isAdmin && (
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-700 dark:text-purple-300 text-[11px] font-medium flex items-center gap-2">
+                  <span>ℹ️</span>
+                  <span>Once submitted, an alert is sent to the Admin asking "Is it completed?". The Admin must review deliverables and answer Yes or No before it is completed.</span>
+                </div>
+              )}
 
               {reportSubmitted && (
                 <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-center text-xs flex items-center justify-center gap-1.5 animate-pulse">
@@ -1396,6 +1730,10 @@ function ProjectTasksContent() {
                   </span>
                 ) : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim() ? (
                   <span>🎉 Task Completed (Type note to post addendum)</span>
+                ) : reportStatus === "WAITING_FOR_ADMIN" && !isAdmin ? (
+                  <span>🚀 Submit Work as Done & Request Admin Review (Yes/No)</span>
+                ) : reportStatus === "COMPLETED" && isAdmin ? (
+                  <span>👔 Approve & Mark 100% Completed</span>
                 ) : (
                   <span>🚀 Submit Work Report & Notify Admins</span>
                 )}

@@ -3,7 +3,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/getUser";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { assertCanManageTicket, assertIsAdmin } from "@/lib/permissions";
-import { notifyProjectTaskAssigned } from "@/lib/notifications";
+import {
+  notifyProjectTaskAssigned,
+  notifyProjectTaskAwaitingSignOff,
+  notifyProjectTaskApproved100,
+  notifyProjectTaskRevisionsRequested
+} from "@/lib/notifications";
 import { errorResponse } from "@/lib/apiError";
 import type { DbProjectTask, DbUser } from "@/types/db";
 
@@ -15,11 +20,12 @@ const patchTaskSchema = z.object({
   deadline: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
   category: z.enum(["PLANNED", "UNPLANNED"]).optional(),
-  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"]).optional(),
+  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "WAITING_FOR_ADMIN", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().min(0).max(100).optional(),
   assignedToId: z.string().uuid().nullable().optional(),
   assignedTechnicianIds: z.array(z.string().uuid()).optional(),
-  completionNote: z.string().max(2000).optional()
+  completionNote: z.string().max(2000).optional(),
+  adminAnswer: z.enum(["yes", "no"]).optional()
 });
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -105,27 +111,73 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
+    const isAdmin = user.role === "ADMIN";
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.title !== undefined) updates.title = body.title.trim();
     if (body.goal !== undefined) updates.goal = body.goal.trim();
     if (body.deadline !== undefined) updates.deadline = new Date(body.deadline).toISOString();
     if (body.priority !== undefined) updates.priority = body.priority;
     if (body.category !== undefined) updates.category = body.category;
-    if (body.status !== undefined) {
-      updates.status = body.status;
-      if (body.status === "COMPLETED") {
-        updates.completed_at = new Date().toISOString();
-        updates.progress = 100;
-        if (body.completionNote) updates.completion_note = body.completionNote;
-      }
-    }
-    if (body.progress !== undefined) {
-      updates.progress = body.progress;
-      if (body.progress === 100 && updates.status !== "COMPLETED") {
+
+    let isManagerApprovingCompletion = false;
+    let isTechnicianRequestingCompletion = false;
+    let isManagerRequestingRevisions = false;
+
+    // Check status & progress requests
+    const requestedStatus = body.status;
+    const requestedProgress = body.progress;
+    const adminAnswer = body.adminAnswer;
+
+    if (adminAnswer === "yes") {
+      assertIsAdmin(user);
+      updates.status = "COMPLETED";
+      updates.progress = 100;
+      updates.completed_at = new Date().toISOString();
+      if (body.completionNote) updates.completion_note = body.completionNote;
+      isManagerApprovingCompletion = true;
+    } else if (adminAnswer === "no") {
+      assertIsAdmin(user);
+      updates.status = "IN_PROGRESS";
+      updates.progress = body.progress !== undefined ? body.progress : 70;
+      if (body.completionNote) updates.completion_note = body.completionNote;
+      isManagerRequestingRevisions = true;
+    } else if (requestedStatus === "WAITING_FOR_ADMIN") {
+      updates.status = "WAITING_FOR_ADMIN";
+      updates.progress = 90;
+      if (body.completionNote) updates.completion_note = body.completionNote;
+      isTechnicianRequestingCompletion = true;
+    } else if (requestedStatus === "COMPLETED" || requestedProgress === 100) {
+      if (isAdmin) {
         updates.status = "COMPLETED";
+        updates.progress = 100;
         updates.completed_at = new Date().toISOString();
+        if (body.completionNote) updates.completion_note = body.completionNote;
+        isManagerApprovingCompletion = true;
+      } else {
+        // Assigned technician or tech role cannot mark completed directly! Must go through Admin review!
+        updates.status = "WAITING_FOR_ADMIN";
+        updates.progress = 90;
+        if (body.completionNote) updates.completion_note = body.completionNote;
+        isTechnicianRequestingCompletion = true;
+      }
+    } else {
+      if (requestedStatus !== undefined) {
+        updates.status = requestedStatus;
+        if (isAdmin && requestedStatus === "IN_PROGRESS" && existing.status === "WAITING_FOR_ADMIN") {
+          isManagerRequestingRevisions = true;
+        }
+      }
+      if (requestedProgress !== undefined) {
+        if (!isAdmin && requestedProgress >= 100) {
+          updates.status = "WAITING_FOR_ADMIN";
+          updates.progress = 90;
+          isTechnicianRequestingCompletion = true;
+        } else {
+          updates.progress = requestedProgress;
+        }
       }
     }
+
     let newlyAssignedIds: string[] = [];
     if (body.assignedTechnicianIds !== undefined) {
       updates.assigned_technician_ids = body.assignedTechnicianIds;
@@ -151,6 +203,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .single();
 
     if (updateErr) throw new Error(updateErr.message);
+
+    // Record report entry and send notifications
+    if (isManagerApprovingCompletion) {
+      const note = body.completionNote?.trim() || "Admin verified deliverables and answered YES: marked 100% completed.";
+      await db.from("project_task_reports").insert({
+        task_id: updated.id,
+        technician_id: user.id,
+        report_text: `[Admin Review: YES] ${note}`,
+        progress: 100,
+        status: "COMPLETED"
+      });
+      await notifyProjectTaskApproved100(db, updated as DbProjectTask, user, note);
+    } else if (isTechnicianRequestingCompletion) {
+      const note = body.completionNote?.trim() || "Technician marked task as completed. Submitted for Admin review (Yes/No).";
+      await db.from("project_task_reports").insert({
+        task_id: updated.id,
+        technician_id: user.id,
+        report_text: `[Technician Done] ${note}`,
+        progress: 90,
+        status: "WAITING_FOR_ADMIN"
+      });
+      await notifyProjectTaskAwaitingSignOff(db, updated as DbProjectTask, user, note);
+    } else if (isManagerRequestingRevisions) {
+      const note = body.completionNote?.trim() || "Admin answered NO: task is not completed yet. Revisions required.";
+      await db.from("project_task_reports").insert({
+        task_id: updated.id,
+        technician_id: user.id,
+        report_text: `[Admin Review: NO] ${note}`,
+        progress: (updates.progress as number) ?? existing.progress ?? 70,
+        status: "IN_PROGRESS"
+      });
+      await notifyProjectTaskRevisionsRequested(db, updated as DbProjectTask, user, note);
+    }
 
     // Notify any newly assigned technicians
     for (const newTechId of newlyAssignedIds) {
