@@ -10,7 +10,7 @@ import type { DbProjectTask, DbUser } from "@/types/db";
 export const dynamic = "force-dynamic";
 
 const createTaskSchema = z.object({
-  title: z.string().min(1, "Task title is required").max(200),
+  title: z.string().max(200).optional().default(""),
   goal: z.string().min(1, "Task goal/description is required").max(3000),
   deadline: z.string().refine((d) => !isNaN(Date.parse(d)), "Invalid deadline date format"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
@@ -255,10 +255,12 @@ export async function POST(req: NextRequest) {
       : (body.assignedToId ? [body.assignedToId] : []);
     const primaryLeadId = assignedIds[0] || null;
 
+    const derivedTitle = (body.title?.trim()) || body.goal.trim().slice(0, 80);
+
     const { data: task, error } = await db
       .from("project_tasks")
       .insert({
-        title: body.title.trim(),
+        title: derivedTitle,
         goal: body.goal.trim(),
         deadline: new Date(body.deadline).toISOString(),
         priority: body.priority,

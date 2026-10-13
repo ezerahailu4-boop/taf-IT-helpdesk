@@ -258,8 +258,8 @@ function ProjectTasksContent() {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.title.trim() || !createForm.goal.trim() || !createForm.deadline) {
-      alert("Please fill in Subject, Goal, and Deadline");
+    if (!createForm.goal.trim() || !createForm.deadline) {
+      alert("Please fill in Goal and Deadline");
       return;
     }
     setCreating(true);
@@ -267,7 +267,7 @@ function ProjectTasksContent() {
       await api("/api/admin/tasks", {
         method: "POST",
         body: JSON.stringify({
-          title: createForm.title.trim(),
+          title: createForm.title.trim() || createForm.goal.trim().slice(0, 80),
           goal: createForm.goal.trim(),
           deadline: createForm.deadline,
           priority: createForm.priority,
@@ -944,6 +944,7 @@ function ProjectTasksContent() {
 
             {/* Modal Scrollable Form Body */}
             <form onSubmit={handleCreateTask} className="overflow-y-auto p-4 sm:p-5 space-y-4 text-xs flex-1 overscroll-contain touch-pan-y">
+              {/* Subject / Task Title - Commented out
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
                   Subject / Task Title <span className="text-red-500">*</span>
@@ -957,6 +958,7 @@ function ProjectTasksContent() {
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
+              */}
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
