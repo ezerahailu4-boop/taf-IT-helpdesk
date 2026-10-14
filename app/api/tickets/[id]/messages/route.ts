@@ -42,6 +42,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single();
     if (commentErr) throw new Error(commentErr.message);
 
+    // Stamp first-response SLA the moment a technician/admin first replies publicly.
+    if (senderRole !== "EMPLOYEE" && !ticket.first_responded_at) {
+      await db.from("tickets").update({ first_responded_at: new Date().toISOString() }).eq("id", ticket.id);
+    }
+
     // Notify the "other side" of the conversation.
     if (senderRole === "EMPLOYEE" && ticket.assigned_technician_id) {
       const { data: tech } = await db.from("users").select("*").eq("id", ticket.assigned_technician_id).single();

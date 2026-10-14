@@ -251,6 +251,73 @@ export async function notifySlaBreach(
   await log(db, technician.id, ticket.id, "SLA_BREACH", "SLA resolution breach escalated", adminText);
 }
 
+export async function notifyResponseSlaWarning(
+  db: SupabaseClient,
+  ticket: DbTicket,
+  technician: DbUser,
+  remainingText?: string
+) {
+  if (!technician?.telegram_id) return;
+  const timeLeft = remainingText || "Less than 20% first-response window remaining";
+  const text =
+    `⏰ <b>SLA FIRST-RESPONSE WARNING</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `⏳ <b>Time Remaining:</b> <code>${timeLeft}</code>\n` +
+    `\n<i>Send the customer a first reply before the deadline breach!</i>`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [[miniAppButton("🎫 Open Ticket Now", `/tickets/${ticket.id}`)]],
+    parseMode: "HTML"
+  });
+  await log(db, technician.id, ticket.id, "SLA_WARNING", "SLA first-response warning sent", text);
+}
+
+export async function notifyResponseSlaBreach(
+  db: SupabaseClient,
+  ticket: DbTicket,
+  technician: DbUser
+) {
+  const techName = `${technician.first_name ?? "Technician"} ${technician.last_name ?? ""}`.trim();
+  const techText =
+    `🚨 <b>SLA FIRST-RESPONSE BREACHED!</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `\n🔥 <i>No first reply was sent within the agreed response window. Escalation alert has been triggered to IT Admins.</i>`;
+
+  if (technician?.telegram_id) {
+    await sendMessage(technician.telegram_id, techText, {
+      buttons: [[miniAppButton("🎫 Reply Immediately", `/tickets/${ticket.id}`)]],
+      parseMode: "HTML"
+    });
+  }
+
+  const adminText =
+    `🚨 <b>TICKET FIRST-RESPONSE SLA BREACH</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `🎫 <b>Ticket:</b> <code>${ticket.ticket_number}</code>\n` +
+    `📋 <b>Subject:</b> ${ticket.subject}\n` +
+    `⚡ <b>Priority:</b> <b>${ticket.priority}</b>\n` +
+    `👨‍💻 <b>Assigned Tech:</b> ${techName} (@${technician.telegram_username || "tech"})\n` +
+    `\n⚠️ <i>Ticket has not received a first response and is past the response SLA. Admin intervention required.</i>`;
+
+  const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
+  for (const admin of admins ?? []) {
+    if ((admin as DbUser).telegram_id) {
+      await sendMessage((admin as DbUser).telegram_id, adminText, {
+        buttons: [[miniAppButton("🛡️ Inspect Ticket in Admin", `/tickets/${ticket.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+
+  await log(db, technician.id, ticket.id, "SLA_BREACH", "SLA first-response breach escalated", adminText);
+}
+
 export async function notifyProjectTaskDeadlineWarning(
   db: SupabaseClient,
   task: DbProjectTask,

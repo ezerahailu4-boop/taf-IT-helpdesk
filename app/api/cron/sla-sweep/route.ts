@@ -4,6 +4,8 @@ import { computeSlaState } from "@/lib/sla";
 import {
   notifySlaWarning,
   notifySlaBreach,
+  notifyResponseSlaWarning,
+  notifyResponseSlaBreach,
   notifyProjectTaskDeadlineWarning,
   notifyProjectTaskDeadlineBreach
 } from "@/lib/notifications";
@@ -63,12 +65,9 @@ async function runSlaSweep(req: NextRequest) {
   let ticketBreaches = 0;
 
   for (const ticket of (tickets ?? []) as DbTicket[]) {
-    const sla = computeSlaState({
-      createdAt: ticket.created_at,
-      resolutionDueAt: ticket.resolution_due_at,
-      resolvedAt: ticket.resolved_at,
-      status: ticket.status
-    });
+    if (!ticket.assigned_technician_id) continue;
+    const { data: tech } = await db.from("users").select("*").eq("id", ticket.assigned_technician_id).single();
+    if (!tech) continue;
 
     const { data: existingEvents } = await db
       .from("sla_events")
@@ -76,9 +75,34 @@ async function runSlaSweep(req: NextRequest) {
       .eq("ticket_id", ticket.id);
     const already = new Set((existingEvents ?? []).map((e: any) => e.event_type));
 
-    if (!ticket.assigned_technician_id) continue;
-    const { data: tech } = await db.from("users").select("*").eq("id", ticket.assigned_technician_id).single();
-    if (!tech) continue;
+    // --- First-response SLA (only while no first response has been logged yet) ---
+    if (!ticket.first_responded_at && ticket.response_due_at) {
+      const responseSla = computeSlaState({
+        createdAt: ticket.created_at,
+        resolutionDueAt: ticket.response_due_at,
+        resolvedAt: null,
+        status: ticket.status
+      });
+
+      if (responseSla.state === "AT_RISK" && !already.has("RESPONSE_WARNING")) {
+        await notifyResponseSlaWarning(db, ticket, tech as DbUser, responseSla.label);
+        await db.from("sla_events").insert({ ticket_id: ticket.id, event_type: "RESPONSE_WARNING" });
+        ticketWarnings++;
+      }
+      if (responseSla.state === "BREACHED" && !already.has("RESPONSE_BREACH")) {
+        await notifyResponseSlaBreach(db, ticket, tech as DbUser);
+        await db.from("sla_events").insert({ ticket_id: ticket.id, event_type: "RESPONSE_BREACH" });
+        ticketBreaches++;
+      }
+    }
+
+    // --- Resolution SLA ---
+    const sla = computeSlaState({
+      createdAt: ticket.created_at,
+      resolutionDueAt: ticket.resolution_due_at,
+      resolvedAt: ticket.resolved_at,
+      status: ticket.status
+    });
 
     if (sla.state === "AT_RISK" && !already.has("RESOLUTION_WARNING")) {
       await notifySlaWarning(db, ticket, tech as DbUser, sla.label);

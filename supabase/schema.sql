@@ -96,12 +96,20 @@ create table if not exists sla_policies (
   updated_at timestamptz not null default now()
 );
 
+-- Professional SLA targets (ITIL-style):
+--   CRITICAL  P1 — business-down outage: 15 min first response, 4h resolution
+--   HIGH      P2 — major function blocked: 1h first response, 8h resolution
+--   MEDIUM    P3 — standard request / partial impairment: 4h response, 1 business day (24h) resolution
+--   LOW       P4 — minor issue / general request: 8h response, 3 business days (72h) resolution
 insert into sla_policies (priority, response_minutes, resolution_minutes) values
-  ('CRITICAL', 15, 120),
-  ('HIGH', 30, 240),
-  ('MEDIUM', 120, 1440),
-  ('LOW', 240, 4320)
-on conflict (priority) do nothing;
+  ('CRITICAL', 15, 240),
+  ('HIGH', 60, 480),
+  ('MEDIUM', 240, 1440),
+  ('LOW', 480, 4320)
+on conflict (priority) do update set
+  response_minutes = excluded.response_minutes,
+  resolution_minutes = excluded.resolution_minutes,
+  updated_at = now();
 
 -- ---------- ASSETS ----------
 create table if not exists assets (
