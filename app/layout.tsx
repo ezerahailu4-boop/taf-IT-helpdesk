@@ -4,7 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "TAF IT Support",
-  description: "TAF IT Helpdesk"
+  description: "TAF IT Helpdesk",
+  icons: { icon: "/bot-logo.png" }
 };
 
 export const viewport: Viewport = {

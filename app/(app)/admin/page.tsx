@@ -4,6 +4,8 @@ import Link from "next/link";
 import { api } from "@/lib/apiClient";
 import { TicketCard, CardSkeleton } from "@/components/TicketCard";
 import { PriorityPill, StatusPill } from "@/components/StatusPill";
+import { ExportModal } from "@/components/ExportModal";
+import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
 import type { DbTicket } from "@/types/db";
 
 type Timeframe = "today" | "week" | "month" | "all";
@@ -113,46 +115,45 @@ export default function AdminDashboard() {
     }
   };
 
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const ticketHeaders = useMemo(() => [
+    "Ticket Number",
+    "Subject",
+    "Priority",
+    "Status",
+    "Requester Name",
+    "Requester Username",
+    "Assigned Technician",
+    "Department",
+    "Category",
+    "Created At"
+  ], []);
+
+  const ticketRows = useMemo(() => {
+    if (!data?.tickets) return [];
+    return data.tickets.map((t) => [
+      t.ticket_number || "",
+      t.subject || "",
+      t.priority || "",
+      t.status || "",
+      t.requester_name || "",
+      t.requester_username ? `@${t.requester_username}` : "",
+      t.technician_name || "Unassigned",
+      t.department_name || "",
+      t.category_label || "",
+      t.created_at ? new Date(t.created_at).toLocaleString() : ""
+    ]);
+  }, [data?.tickets]);
+
   const handleExportCSV = () => {
     if (!data?.tickets || data.tickets.length === 0) {
       alert("No tickets available to export for this selection.");
       return;
     }
-
-    const headers = [
-      "Ticket Number",
-      "Subject",
-      "Priority",
-      "Status",
-      "Requester Name",
-      "Requester Username",
-      "Assigned Technician",
-      "Department",
-      "Category",
-      "Created At"
-    ];
-
-    const rows = data.tickets.map((t) => [
-      `"${t.ticket_number}"`,
-      `"${(t.subject || "").replace(/"/g, '""')}"`,
-      `"${t.priority}"`,
-      `"${t.status}"`,
-      `"${t.requester_name || ""}"`,
-      `"${t.requester_username ? `@${t.requester_username}` : ""}"`,
-      `"${t.technician_name || "Unassigned"}"`,
-      `"${t.department_name || ""}"`,
-      `"${t.category_label || ""}"`,
-      `"${new Date(t.created_at).toLocaleString()}"`
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `IT_Helpdesk_${timeframe}_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `IT_Helpdesk_${timeframe}_${new Date().toISOString().split("T")[0]}.csv`;
+    const csv = buildCsvString(ticketHeaders, ticketRows);
+    downloadCsv(filename, csv);
   };
 
   // Filtered tickets in quick view
@@ -247,9 +248,9 @@ export default function AdminDashboard() {
           </button>
 
           <button
-            onClick={handleExportCSV}
+            onClick={() => setShowExportModal(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-colors"
-            title="Export filtered records as CSV"
+            title="Open modern export hub to download CSV, copy data, or print report"
           >
             <svg className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -892,6 +893,23 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Modern Tickets Export & Report Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Support Tickets"
+        subtitle={`Export helpdesk tickets filtered by timeframe (${timeframe === "all" ? "All Time" : timeframe}) to Excel/CSV, clipboard, or printable summary.`}
+        filenamePrefix={`IT_Tickets_${timeframe}`}
+        headers={ticketHeaders}
+        rows={ticketRows}
+        summaryCards={[
+          { label: "Total Tickets", value: data?.counts.total ?? 0, icon: "🎫" },
+          { label: "Open / Queued", value: data?.counts.open ?? 0, icon: "📬", accent: "#3B82F6" },
+          { label: "In Progress", value: data?.counts.inProgress ?? 0, icon: "⚡", accent: "#F59E0B" },
+          { label: "Resolved", value: data?.counts.resolved ?? 0, icon: "✅", accent: "#10B981" }
+        ]}
+      />
     </div>
   );
 }

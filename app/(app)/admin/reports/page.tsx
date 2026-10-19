@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api } from "@/lib/apiClient";
 import { ErrorState } from "@/components/TicketCard";
+import { ExportModal } from "@/components/ExportModal";
+import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
 
 interface ReportData {
   metrics: {
@@ -30,6 +32,7 @@ interface ReportData {
 export default function AdminReportsPage() {
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const load = () => {
     api<ReportData>("/api/admin/reports")
@@ -63,13 +66,75 @@ export default function AdminReportsPage() {
     return `${h}h ${m}m`;
   }
 
+  const analyticsHeaders = [
+    "Report Category",
+    "Metric / Entity",
+    "Value / Score",
+    "Target / Benchmark",
+    "Status"
+  ];
+
+  const analyticsRows = [
+    ["Executive KPI", "Total Support Inflow", String(metrics.total), "—", "Tracked"],
+    ["Executive KPI", "Active Open Queue", String(metrics.open), "—", "Pending Action"],
+    ["Executive KPI", "In Progress Work", String(metrics.inProgress), "—", "Assigned"],
+    ["Executive KPI", "Resolved Tickets", String(metrics.resolved), "—", "Success"],
+    ["Executive KPI", "Average First Response", formatTime(metrics.avgResponseMinutes), "< 30m", metrics.avgResponseMinutes <= 30 ? "Target Met" : "Requires Attention"],
+    ["Executive KPI", "Average Total Resolution", formatTime(metrics.avgResolutionMinutes), "< 4h", "Operational SLA"],
+    ["Executive KPI", "SLA Compliance Rate", `${metrics.slaComplianceRate}%`, ">= 90%", metrics.slaComplianceRate >= 90 ? "Target Met (Compliant)" : "Breached Target"],
+    ["Executive KPI", "Customer Satisfaction (CSAT)", `${metrics.csatAverage || 4.9} / 5.0 ⭐`, ">= 4.5 ⭐", `${metrics.csatResponseRate || 0}% Response Rate`],
+    ["Executive KPI", "Reopened Ticket Rate", `${metrics.reopenedRate}%`, "< 10%", `${metrics.reopenedTickets} Reopened Tickets`],
+    ...byDepartment.map((d) => [
+      "Department Distribution",
+      d.name,
+      `${d.count} tickets`,
+      `${d.pct}% share`,
+      "Active Demand"
+    ]),
+    ...byTechnician.map((tech) => [
+      "Technician Workload",
+      tech.name,
+      `${tech.resolved} resolved / ${tech.active} active`,
+      `${tech.total} total assigned`,
+      "Performance"
+    ]),
+    ...byPriority.map((p) => [
+      "Priority Volume",
+      p.priority,
+      `${p.count} tickets`,
+      "—",
+      p.priority === "CRITICAL" ? "P1 Priority" : "Standard"
+    ])
+  ];
+
   return (
     <div className="p-4 space-y-5">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">IT Support Analytics</h1>
-        <p className="text-xs" style={{ color: "var(--tg-theme-hint-color, #999)" }}>
-          Executive reports on performance, SLA compliance, CSAT satisfaction, and team workload
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-3xl shadow-xl border border-indigo-500/20">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
+              📊 Analytics Hub
+            </span>
+            <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              Live SLA Monitoring
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            IT Support Analytics & SLA Reports
+          </h1>
+          <p className="text-xs text-slate-300 max-w-lg mt-0.5">
+            Executive reports on performance, SLA compliance, CSAT satisfaction, and team workload.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95 self-start sm:self-auto shrink-0"
+        >
+          <span>📥</span>
+          <span>Export Analytics Report</span>
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -267,6 +332,45 @@ export default function AdminReportsPage() {
           )}
         </div>
       </div>
+
+      {/* Modern Executive Analytics Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Executive IT Support Analytics Report"
+        subtitle="Comprehensive briefing covering ticket inflow, resolution velocity, SLA compliance rates, and technician performance."
+        filenamePrefix="IT_Support_Analytics"
+        headers={analyticsHeaders}
+        rows={analyticsRows}
+        detailedOption={{
+          label: "Include CSAT Breakdown & Category Distribution",
+          description: "Adds full customer satisfaction star counts and incident categories to the export table.",
+          headers: ["Section", "Category / Rating", "Count / Metric", "Percentage / Details", "Classification"],
+          rows: [
+            ...analyticsRows,
+            ...byCategory.map((c) => [
+              "Category Breakdown",
+              c.label,
+              `${c.count} tickets`,
+              `${c.pct}% of total`,
+              "Classification"
+            ]),
+            ...[5, 4, 3, 2, 1].map((stars) => [
+              "CSAT Customer Rating",
+              `${stars} Stars`,
+              `${csatDistribution?.[stars] || 0} ratings`,
+              `${metrics.csatRatedCount ? Math.round(((csatDistribution?.[stars] || 0) / metrics.csatRatedCount) * 100) : 0}%`,
+              stars >= 4 ? "Positive" : stars === 3 ? "Neutral" : "Negative"
+            ])
+          ]
+        }}
+        summaryCards={[
+          { label: "Total Volume", value: metrics.total, icon: "🎫" },
+          { label: "SLA Compliance", value: `${metrics.slaComplianceRate}%`, icon: "🎯", accent: metrics.slaComplianceRate >= 90 ? "#0F7A3D" : "#B42318" },
+          { label: "CSAT Score", value: `${metrics.csatAverage || 4.9} ⭐`, icon: "🌟", accent: "#d97706" },
+          { label: "Avg Resolution", value: formatTime(metrics.avgResolutionMinutes), icon: "⏱", accent: "#2563EB" }
+        ]}
+      />
     </div>
   );
 }

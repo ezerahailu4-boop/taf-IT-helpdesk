@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/apiClient";
 import { useMe } from "@/lib/useMe";
+import { ExportModal } from "@/components/ExportModal";
+import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
 import type { DbProjectTask, DbProjectTaskReport, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
 
 interface TechMember {
@@ -127,6 +129,10 @@ function ProjectTasksContent() {
   const [adminReviewNote, setAdminReviewNote] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
+
+  // Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showTaskDetailExportModal, setShowTaskDetailExportModal] = useState(false);
 
   // Live Sync & SLA Sweep States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -407,25 +413,21 @@ function ProjectTasksContent() {
 
   const isAdmin = user?.role === "ADMIN";
 
-  const handleExportCSV = () => {
-    if (!filteredTasks || filteredTasks.length === 0) {
-      alert("No tasks available to export for this selection.");
-      return;
-    }
+  const taskSummaryHeaders = useMemo(() => [
+    "Task Title",
+    "Category",
+    "Priority",
+    "Status",
+    "Progress (%)",
+    "Assigned Technician(s)",
+    "Deadline",
+    "Goal / Deliverables",
+    "Created At"
+  ], []);
 
-    const headers = [
-      "Task Title",
-      "Category",
-      "Priority",
-      "Status",
-      "Progress (%)",
-      "Assigned Technician(s)",
-      "Deadline",
-      "Goal / Deliverables",
-      "Created At"
-    ];
-
-    const rows = filteredTasks.map((t) => {
+  const taskSummaryRows = useMemo(() => {
+    if (!filteredTasks) return [];
+    return filteredTasks.map((t) => {
       const techNames =
         t.assigned_technicians && t.assigned_technicians.length > 0
           ? t.assigned_technicians.map((tech: any) => `${tech.first_name || ""} ${tech.last_name || ""}`.trim()).join("; ")
@@ -434,33 +436,68 @@ function ProjectTasksContent() {
           : "Unassigned";
 
       return [
-        `"${(t.title || "").replace(/"/g, '""')}"`,
-        `"${t.category || "PLANNED"}"`,
-        `"${t.priority}"`,
-        `"${t.status}"`,
-        `"${t.progress}%"`,
-        `"${techNames.replace(/"/g, '""')}"`,
-        `"${new Date(t.deadline).toLocaleString()}"`,
-        `"${(t.goal || "").replace(/"/g, '""')}"`,
-        `"${new Date(t.created_at).toLocaleString()}"`
+        t.title || "",
+        t.category || "PLANNED",
+        t.priority,
+        t.status,
+        `${t.progress}%`,
+        techNames,
+        t.deadline ? new Date(t.deadline).toLocaleString() : "No deadline",
+        t.goal || "",
+        t.created_at ? new Date(t.created_at).toLocaleString() : ""
       ];
     });
+  }, [filteredTasks]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+  const taskDetailedHeaders = useMemo(() => [
+    "Task Title",
+    "Category",
+    "Priority",
+    "Status",
+    "Progress (%)",
+    "Assigned Technicians",
+    "Deadline",
+    "Goal / Scope",
+    "Completion Notes / Admin Sign-off",
+    "Created Date"
+  ], []);
+
+  const taskDetailedRows = useMemo(() => {
+    if (!filteredTasks) return [];
+    return filteredTasks.map((t) => {
+      const techNames =
+        t.assigned_technicians && t.assigned_technicians.length > 0
+          ? t.assigned_technicians.map((tech: any) => `${tech.first_name || ""} ${tech.last_name || ""}`.trim()).join("; ")
+          : t.assigned_to
+          ? `${t.assigned_to.first_name || ""} ${t.assigned_to.last_name || ""}`.trim()
+          : "Unassigned";
+
+      return [
+        t.title || "",
+        t.category || "PLANNED",
+        t.priority,
+        t.status,
+        `${t.progress}%`,
+        techNames,
+        t.deadline ? new Date(t.deadline).toLocaleString() : "No deadline",
+        t.goal || "",
+        t.completion_note || "None logged",
+        t.created_at ? new Date(t.created_at).toLocaleString() : ""
+      ];
+    });
+  }, [filteredTasks]);
+
+  const handleExportCSV = () => {
+    if (!filteredTasks || filteredTasks.length === 0) {
+      alert("No tasks available to export for this selection.");
+      return;
+    }
     const catLabel = categoryFilter === "ALL" ? "All" : categoryFilter;
-    link.setAttribute(
-      "download",
-      `IT_Tasks_${catLabel}_${new Date().toISOString().split("T")[0]}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `IT_Tasks_${catLabel}_${new Date().toISOString().split("T")[0]}.csv`;
+    const csv = buildCsvString(taskSummaryHeaders, taskSummaryRows);
+    downloadCsv(filename, csv);
   };
+
 
   const formatDeadline = (d: string) => {
     const target = new Date(d);
@@ -536,12 +573,12 @@ function ProjectTasksContent() {
             )}
 
             <button
-              onClick={handleExportCSV}
-              title="Export filtered project tasks as CSV"
+              onClick={() => setShowExportModal(true)}
+              title="Open modern export hub to download CSV, copy data, or print report"
               className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all border border-white/10 shadow-sm active:scale-95"
             >
               <span>📥</span>
-              <span>Export CSV</span>
+              <span>Export & Reports</span>
             </button>
 
             <Link
@@ -1515,9 +1552,20 @@ function ProjectTasksContent() {
             {/* Technician Work Reports Timeline */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-                  Technician Work Reports ({selectedTaskDetail.reports.length})
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                    Technician Work Reports ({selectedTaskDetail.reports.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowTaskDetailExportModal(true)}
+                    title="Export or print this task's complete report logs"
+                    className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 transition-colors flex items-center gap-1 active:scale-95"
+                  >
+                    <span>📥</span>
+                    <span>Export Report</span>
+                  </button>
+                </div>
                 {selectedTaskDetail.task.status === "COMPLETED" ? (
                   <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                     <span>🎉</span>
@@ -1744,6 +1792,78 @@ function ProjectTasksContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modern Tasks Export & Report Hub Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export IT Project Tasks & Deliverables"
+        subtitle="Export high-level project tasks, deadlines, completion percentages, and assigned IT engineers to Excel/CSV, clipboard, or printable PDF."
+        filenamePrefix={`IT_Tasks_${categoryFilter === "ALL" ? "All" : categoryFilter}`}
+        headers={taskSummaryHeaders}
+        rows={taskSummaryRows}
+        detailedOption={{
+          label: "Include Completion Notes & Scope Details",
+          description: "Expands the dataset to include technical scope, completion notes, and manager sign-off logs.",
+          headers: taskDetailedHeaders,
+          rows: taskDetailedRows
+        }}
+        summaryCards={[
+          { label: "Total Tasks", value: filteredTasks.length, icon: "📋" },
+          { label: "In Progress", value: filteredTasks.filter((t) => t.status === "IN_PROGRESS").length, icon: "⚡", accent: "#3B82F6" },
+          { label: "Awaiting Review", value: filteredTasks.filter((t) => t.status === "WAITING_FOR_ADMIN").length, icon: "⏳", accent: "#A855F7" },
+          { label: "Completed", value: filteredTasks.filter((t) => t.status === "COMPLETED").length, icon: "✅", accent: "#10B981" }
+        ]}
+      />
+
+      {/* Modern Single Task Detail & Reports Export Modal */}
+      {selectedTaskDetail && (
+        <ExportModal
+          isOpen={showTaskDetailExportModal}
+          onClose={() => setShowTaskDetailExportModal(false)}
+          title={`Work Report: ${selectedTaskDetail.task.title}`}
+          subtitle={`Deliverable records, progress logs, and technician work reports for task: "${selectedTaskDetail.task.title}".`}
+          filenamePrefix={`Task_Report_${selectedTaskDetail.task.title.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 30)}`}
+          headers={[
+            "Task Title",
+            "Report #",
+            "Technician",
+            "Progress Milestone (%)",
+            "Status Milestone",
+            "Timestamp",
+            "Work Log / Report Notes"
+          ]}
+          rows={
+            selectedTaskDetail.reports.length > 0
+              ? selectedTaskDetail.reports.map((rep, idx) => [
+                  selectedTaskDetail.task.title,
+                  `#${selectedTaskDetail.reports.length - idx}`,
+                  rep.technician ? `${rep.technician.first_name || ""} ${rep.technician.last_name || ""}`.trim() : "Technician",
+                  `${rep.progress}%`,
+                  rep.status,
+                  new Date(rep.created_at).toLocaleString(),
+                  rep.report_text || "No notes"
+                ])
+              : [
+                  [
+                    selectedTaskDetail.task.title,
+                    "#0 (Initial Creation)",
+                    selectedTaskDetail.task.assigned_to ? `${selectedTaskDetail.task.assigned_to.first_name || ""} ${selectedTaskDetail.task.assigned_to.last_name || ""}`.trim() : "Unassigned",
+                    `${selectedTaskDetail.task.progress}%`,
+                    selectedTaskDetail.task.status,
+                    new Date(selectedTaskDetail.task.created_at).toLocaleString(),
+                    selectedTaskDetail.task.goal || "Initial task creation"
+                  ]
+                ]
+          }
+          summaryCards={[
+            { label: "Current Progress", value: `${selectedTaskDetail.task.progress}%`, icon: "📈", accent: "#6366F1" },
+            { label: "Status", value: selectedTaskDetail.task.status, icon: "🎯" },
+            { label: "Work Logs", value: selectedTaskDetail.reports.length, icon: "📝" },
+            { label: "Priority", value: selectedTaskDetail.task.priority, icon: "🚨" }
+          ]}
+        />
       )}
     </div>
   );
