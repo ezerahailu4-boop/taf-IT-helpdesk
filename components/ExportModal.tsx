@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { buildCsvString, downloadCsv, copyToClipboard } from "@/lib/exportUtils";
+import { generatePdfReport, printExecutiveDocument } from "@/lib/pdfUtils";
 
 export interface SummaryCardItem {
   label: string;
@@ -40,7 +41,8 @@ export function ExportModal({
 }: ExportModalProps) {
   const [includeDetails, setIncludeDetails] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<"export" | "preview">("export");
 
   if (!isOpen) return null;
@@ -49,14 +51,38 @@ export function ExportModal({
   const activeRows = includeDetails && detailedOption ? detailedOption.rows : rows;
 
   const dateStamp = new Date().toISOString().split("T")[0];
-  const finalFilename = `${filenamePrefix}_${includeDetails ? "Detailed_" : ""}${dateStamp}.csv`;
+  const finalCsvFilename = `${filenamePrefix}_${includeDetails ? "Detailed_" : ""}${dateStamp}.csv`;
+  const finalPdfFilename = `${filenamePrefix}_${includeDetails ? "Detailed_" : ""}${dateStamp}.pdf`;
 
-  const handleDownload = () => {
+  const handleDownloadCsv = () => {
     const csv = buildCsvString(activeHeaders, activeRows);
-    const ok = downloadCsv(finalFilename, csv);
+    const ok = downloadCsv(finalCsvFilename, csv);
     if (ok) {
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 3500);
+      setDownloadSuccess(finalCsvFilename);
+      setTimeout(() => setDownloadSuccess(null), 4000);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    setIsPdfGenerating(true);
+    try {
+      const ok = generatePdfReport({
+        title,
+        subtitle,
+        filename: finalPdfFilename,
+        headers: activeHeaders,
+        rows: activeRows,
+        summaryCards: summaryCards?.map((c) => ({ label: c.label, value: c.value }))
+      });
+      if (ok) {
+        setDownloadSuccess(finalPdfFilename);
+        setTimeout(() => setDownloadSuccess(null), 4000);
+      }
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF. Please try the Print/Preview option.");
+    } finally {
+      setIsPdfGenerating(false);
     }
   };
 
@@ -70,38 +96,20 @@ export function ExportModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    printExecutiveDocument({
+      title,
+      subtitle,
+      filename: finalPdfFilename,
+      headers: activeHeaders,
+      rows: activeRows,
+      summaryCards: summaryCards?.map((c) => ({ label: c.label, value: c.value }))
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-      {/* Print Specific CSS to make printed report gorgeous */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-report-area, #printable-report-area * {
-            visibility: visible !important;
-          }
-          #printable-report-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            padding: 24px !important;
-            background: white !important;
-            color: black !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200">
       {/* Modal Container */}
       <div
-        id="printable-report-area"
         className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
       >
         {/* Header Banner */}
@@ -128,7 +136,7 @@ export function ExportModal({
 
           <button
             onClick={onClose}
-            className="no-print p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
             title="Close"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -138,7 +146,7 @@ export function ExportModal({
         </div>
 
         {/* Tab Controls (Export vs Live Preview) */}
-        <div className="no-print flex items-center justify-between px-5 pt-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-5 pt-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex gap-2 text-xs font-bold">
             <button
               onClick={() => setActiveTab("export")}
@@ -148,7 +156,7 @@ export function ExportModal({
                   : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
-              Export Options
+              Export & PDF Formats
             </button>
             <button
               onClick={() => setActiveTab("preview")}
@@ -166,7 +174,7 @@ export function ExportModal({
           </div>
 
           <span className="text-[11px] text-slate-400 font-mono truncate hidden sm:inline">
-            {finalFilename}
+            PDF & CSV Engine Ready
           </span>
         </div>
 
@@ -232,57 +240,58 @@ export function ExportModal({
                 </div>
               )}
 
-              {/* Action Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1. CSV Download */}
+              {/* Action Cards Grid - 4 Modern Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. Direct PDF Download */}
                 <button
-                  onClick={handleDownload}
+                  onClick={handleDownloadPdf}
+                  disabled={isPdfGenerating}
+                  className="p-4 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-gradient-to-b from-rose-50/50 to-rose-100/30 dark:from-rose-950/30 dark:to-rose-900/20 hover:border-rose-400 hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group active:scale-[0.98] disabled:opacity-50"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center text-lg font-bold shadow-sm shadow-rose-600/30 group-hover:scale-110 transition-transform">
+                      {isPdfGenerating ? "⏳" : "📄"}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded-full border border-rose-300/40">
+                      Direct PDF
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Save as PDF Document</span>
+                      <span className="text-xs text-rose-600 font-mono">(.pdf)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Directly downloads a high-resolution, multi-page PDF document with KPIs and tables.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. CSV Download */}
+                <button
+                  onClick={handleDownloadCsv}
                   className="p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-b from-indigo-50/50 to-indigo-100/30 dark:from-indigo-950/40 dark:to-indigo-900/20 hover:border-indigo-400 hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group active:scale-[0.98]"
                 >
                   <div className="flex items-center justify-between">
                     <span className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg font-bold shadow-sm shadow-indigo-600/30 group-hover:scale-110 transition-transform">
                       📥
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-300/40">
                       Excel / CSV
                     </span>
                   </div>
                   <div>
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                      Download File
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Export Excel / CSV</span>
+                      <span className="text-xs text-indigo-600 font-mono">(.csv)</span>
                     </h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Formatted with UTF-8 BOM for Microsoft Excel & Google Sheets.
+                      Formatted with UTF-8 BOM for Microsoft Excel, Numbers & Google Sheets.
                     </p>
                   </div>
                 </button>
 
-                {/* 2. Copy to Clipboard */}
-                <button
-                  onClick={handleCopy}
-                  className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group active:scale-[0.98]"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg font-bold shadow-sm shadow-emerald-600/30 group-hover:scale-110 transition-transform">
-                      {copied ? "✓" : "📋"}
-                    </span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                      copied ? "bg-emerald-500/20 text-emerald-600" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                    }`}>
-                      {copied ? "Copied!" : "Clipboard"}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                      {copied ? "Copied to Clipboard!" : "Copy CSV Text"}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Instant copy for Telegram, Slack, or fast paste into spreadsheets.
-                    </p>
-                  </div>
-                </button>
-
-                {/* 3. Print / PDF */}
+                {/* 3. Print / PDF Preview Window */}
                 <button
                   onClick={handlePrint}
                   className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group active:scale-[0.98]"
@@ -292,15 +301,40 @@ export function ExportModal({
                       🖨️
                     </span>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">
-                      Print / PDF
+                      Print & Print-to-PDF
                     </span>
                   </div>
                   <div>
                     <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                      Print or Save PDF
+                      Print Preview Document
                     </h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Executive document layout ready for printer or PDF archiving.
+                      Opens an unclipped, beautifully formatted letterhead page ready for physical printing.
+                    </p>
+                  </div>
+                </button>
+
+                {/* 4. Copy to Clipboard */}
+                <button
+                  onClick={handleCopy}
+                  className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group active:scale-[0.98]"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg font-bold shadow-sm shadow-emerald-600/30 group-hover:scale-110 transition-transform">
+                      {copied ? "✓" : "📋"}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      copied ? "bg-emerald-500/20 text-emerald-600 font-bold" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                    }`}>
+                      {copied ? "Copied!" : "Quick Copy"}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {copied ? "Copied to Clipboard!" : "Copy Table Data"}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Fast copy for Telegram, Slack, or instant paste into spreadsheets.
                     </p>
                   </div>
                 </button>
@@ -310,10 +344,10 @@ export function ExportModal({
               {downloadSuccess && (
                 <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between animate-in fade-in">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold">✓</span>
-                    <span>Download started: <strong>{finalFilename}</strong></span>
+                    <span className="font-bold text-base">✓</span>
+                    <span>Download complete: <strong>{downloadSuccess}</strong></span>
                   </div>
-                  <span className="text-[10px] opacity-75">Check your downloads folder</span>
+                  <span className="text-[10px] opacity-75 font-semibold">Saved to your device</span>
                 </div>
               )}
             </div>
@@ -373,24 +407,32 @@ export function ExportModal({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="no-print p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">
+        {/* Footer with dual action buttons */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
             Exported from <strong>TAF IT Support Hub</strong>
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             >
               Close
             </button>
             <button
-              onClick={handleDownload}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+              onClick={handleDownloadCsv}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
             >
-              <span>📥 Download CSV</span>
+              <span>📥 CSV</span>
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isPdfGenerating}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+            >
+              <span>{isPdfGenerating ? "⏳" : "📄"}</span>
+              <span>{isPdfGenerating ? "Generating..." : "Save PDF"}</span>
             </button>
           </div>
         </div>
