@@ -395,8 +395,16 @@ function ProjectTasksContent() {
 
   const filteredTasks = useMemo(() => {
     if (!data?.tasks) return [];
+    const now = Date.now();
     return data.tasks.filter((t) => {
-      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
+      let matchStatus = true;
+      if (statusFilter === "ALL") {
+        matchStatus = true;
+      } else if (statusFilter === "OVERDUE") {
+        matchStatus = t.status !== "COMPLETED" && Boolean(t.deadline) && new Date(t.deadline).getTime() < now;
+      } else {
+        matchStatus = t.status === statusFilter;
+      }
       const matchCategory = categoryFilter === "ALL" || (t.category || "PLANNED") === categoryFilter;
       const matchTech =
         techFilter === "ALL" ||
@@ -612,44 +620,141 @@ function ProjectTasksContent() {
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-3 border-t border-white/10">
-          <div className="bg-black/30 p-3 rounded-2xl border border-white/10">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Tasks</span>
-            <p className="text-xl sm:text-2xl font-black text-white">{data?.metrics.total ?? 0}</p>
-          </div>
-          <div className="bg-blue-500/10 p-3 rounded-2xl border border-blue-500/20">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300">In Progress</span>
-            <p className="text-xl sm:text-2xl font-black text-blue-400">{data?.metrics.inProgress ?? 0}</p>
-          </div>
-          <div className="bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Pending</span>
-            <p className="text-xl sm:text-2xl font-black text-amber-400">{data?.metrics.pending ?? 0}</p>
-          </div>
-          <div className={`p-3 rounded-2xl border transition-all ${
-            (data?.metrics.awaitingApproval ?? 0) > 0
-              ? "bg-purple-500/20 border-purple-500/40 ring-1 ring-purple-500/30"
-              : "bg-purple-500/10 border-purple-500/20"
-          }`}>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1">
-              <span>⏳</span>
-              <span>Awaiting Sign-Off</span>
-            </span>
-            <p className={`text-xl sm:text-2xl font-black ${(data?.metrics.awaitingApproval ?? 0) > 0 ? "text-purple-300 animate-pulse" : "text-purple-400"}`}>
+          {/* Card 1: Total Tasks */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter("ALL")}
+            title="Filter by all tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "ALL"
+                ? "bg-white/15 border-white/40 ring-2 ring-white/50 shadow-lg shadow-white/10 scale-[1.02]"
+                : "bg-black/30 border-white/10 hover:bg-white/10 hover:border-white/20 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Tasks</span>
+              {statusFilter === "ALL" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white shadow-sm shadow-white animate-pulse" />
+              )}
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-white mt-1">{data?.metrics.total ?? 0}</p>
+          </button>
+
+          {/* Card 2: In Progress */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "IN_PROGRESS" ? "ALL" : "IN_PROGRESS")}
+            title="Filter by In Progress tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "IN_PROGRESS"
+                ? "bg-blue-500/25 border-blue-400 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20 scale-[1.02]"
+                : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300">In Progress</span>
+              {statusFilter === "IN_PROGRESS" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-sm shadow-blue-400 animate-pulse" />
+              )}
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-blue-400 mt-1">{data?.metrics.inProgress ?? 0}</p>
+          </button>
+
+          {/* Card 3: Pending */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "PENDING" ? "ALL" : "PENDING")}
+            title="Filter by Pending tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "PENDING"
+                ? "bg-amber-500/25 border-amber-400 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20 scale-[1.02]"
+                : "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Pending</span>
+              {statusFilter === "PENDING" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400 animate-pulse" />
+              )}
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{data?.metrics.pending ?? 0}</p>
+          </button>
+
+          {/* Card 4: Awaiting Sign-Off */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "WAITING_FOR_ADMIN" ? "ALL" : "WAITING_FOR_ADMIN")}
+            title="Filter by tasks Awaiting Sign-Off"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "WAITING_FOR_ADMIN"
+                ? "bg-purple-500/35 border-purple-400 ring-2 ring-purple-500/60 shadow-lg shadow-purple-500/25 scale-[1.02]"
+                : (data?.metrics.awaitingApproval ?? 0) > 0
+                ? "bg-purple-500/20 border-purple-500/40 ring-1 ring-purple-500/30 hover:bg-purple-500/25 hover:scale-[1.01]"
+                : "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/30 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                <span>⏳</span>
+                <span>Awaiting Sign-Off</span>
+              </span>
+              {statusFilter === "WAITING_FOR_ADMIN" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-sm shadow-purple-400 animate-pulse" />
+              )}
+            </div>
+            <p className={`text-xl sm:text-2xl font-black mt-1 ${(data?.metrics.awaitingApproval ?? 0) > 0 ? "text-purple-300 animate-pulse" : "text-purple-400"}`}>
               {data?.metrics.awaitingApproval ?? 0}
             </p>
-          </div>
-          <div className={`p-3 rounded-2xl border ${data?.metrics.overdue ? "bg-red-500/20 border-red-500/30" : "bg-black/30 border-white/10"}`}>
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${data?.metrics.overdue ? "text-red-300" : "text-slate-400"}`}>Overdue</span>
-            <p className={`text-xl sm:text-2xl font-black ${data?.metrics.overdue ? "text-red-400 animate-pulse" : "text-slate-300"}`}>
+          </button>
+
+          {/* Card 5: Overdue */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "OVERDUE" ? "ALL" : "OVERDUE")}
+            title="Filter by Overdue tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "OVERDUE"
+                ? "bg-red-500/35 border-red-400 ring-2 ring-red-500/60 shadow-lg shadow-red-500/25 scale-[1.02]"
+                : (data?.metrics.overdue ?? 0) > 0
+                ? "bg-red-500/20 border-red-500/30 hover:bg-red-500/25 hover:border-red-500/40 hover:scale-[1.01]"
+                : "bg-black/30 border-white/10 hover:bg-white/10 hover:border-white/20 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${(data?.metrics.overdue ?? 0) > 0 ? "text-red-300" : "text-slate-400"}`}>
+                Overdue
+              </span>
+              {statusFilter === "OVERDUE" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 shadow-sm shadow-red-400 animate-pulse" />
+              )}
+            </div>
+            <p className={`text-xl sm:text-2xl font-black mt-1 ${(data?.metrics.overdue ?? 0) > 0 ? "text-red-400 animate-pulse" : "text-slate-300"}`}>
               {data?.metrics.overdue ?? 0}
             </p>
-          </div>
-          <div className="bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/20 col-span-2 sm:col-span-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Completed</span>
-            <div className="flex items-baseline gap-2">
+          </button>
+
+          {/* Card 6: Completed */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "COMPLETED" ? "ALL" : "COMPLETED")}
+            title="Filter by Completed tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between col-span-2 sm:col-span-1 ${
+              statusFilter === "COMPLETED"
+                ? "bg-emerald-500/30 border-emerald-400 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20 scale-[1.02]"
+                : "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Completed</span>
+              {statusFilter === "COMPLETED" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse" />
+              )}
+            </div>
+            <div className="flex items-baseline gap-2 mt-1">
               <p className="text-xl sm:text-2xl font-black text-emerald-400">{data?.metrics.completed ?? 0}</p>
               <span className="text-xs font-bold text-emerald-500">({data?.metrics.completionRate ?? 0}%)</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -658,7 +763,7 @@ function ProjectTasksContent() {
         {/* Status & Category Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-wrap">
           <div className="flex items-center gap-1">
-            {["ALL", "PENDING", "IN_PROGRESS", "WAITING_FOR_ADMIN", "BLOCKED", "COMPLETED"].map((st) => (
+            {["ALL", "PENDING", "IN_PROGRESS", "WAITING_FOR_ADMIN", "OVERDUE", "BLOCKED", "COMPLETED"].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -666,6 +771,16 @@ function ProjectTasksContent() {
                   statusFilter === st
                     ? st === "WAITING_FOR_ADMIN"
                       ? "bg-purple-600 text-white shadow-sm"
+                      : st === "OVERDUE"
+                      ? "bg-red-600 text-white shadow-sm"
+                      : st === "IN_PROGRESS"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : st === "PENDING"
+                      ? "bg-amber-600 text-white shadow-sm"
+                      : st === "COMPLETED"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : st === "BLOCKED"
+                      ? "bg-rose-600 text-white shadow-sm"
                       : "bg-indigo-600 text-white shadow-sm"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
                 }`}
@@ -675,11 +790,33 @@ function ProjectTasksContent() {
                     ? "All Tasks"
                     : st === "WAITING_FOR_ADMIN"
                     ? "⏳ Awaiting Manager Sign-Off"
+                    : st === "OVERDUE"
+                    ? "🚨 Overdue"
                     : st.replace(/_/g, " ")}
                 </span>
                 {st === "WAITING_FOR_ADMIN" && (data?.metrics.awaitingApproval ?? 0) > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
                     {data?.metrics.awaitingApproval}
+                  </span>
+                )}
+                {st === "OVERDUE" && (data?.metrics.overdue ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200">
+                    {data?.metrics.overdue}
+                  </span>
+                )}
+                {st === "PENDING" && (data?.metrics.pending ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
+                    {data?.metrics.pending}
+                  </span>
+                )}
+                {st === "IN_PROGRESS" && (data?.metrics.inProgress ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-200">
+                    {data?.metrics.inProgress}
+                  </span>
+                )}
+                {st === "COMPLETED" && (data?.metrics.completed ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200">
+                    {data?.metrics.completed}
                   </span>
                 )}
               </button>
@@ -759,6 +896,88 @@ function ProjectTasksContent() {
         </div>
       </div>
 
+      {/* Active Filter Pill Bar (Shown when non-default filter is applied) */}
+      {(statusFilter !== "ALL" || categoryFilter !== "ALL" || techFilter !== "ALL" || searchQuery.trim()) && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-2xl text-xs shadow-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-700 dark:text-slate-300">Active Filter:</span>
+            {statusFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 dark:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">
+                <span>
+                  {statusFilter === "OVERDUE"
+                    ? "🚨 Overdue"
+                    : statusFilter === "WAITING_FOR_ADMIN"
+                    ? "⏳ Awaiting Sign-Off"
+                    : statusFilter.replace(/_/g, " ")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("ALL")}
+                  title="Clear status filter"
+                  className="hover:text-red-500 font-black ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {categoryFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-900/70 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
+                <span>{categoryFilter === "PLANNED" ? "📅 Planned" : "⚡ Unplanned"}</span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter("ALL")}
+                  title="Clear category filter"
+                  className="hover:text-red-500 font-black ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {techFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                <span>👤 Technician Filter</span>
+                <button
+                  type="button"
+                  onClick={() => setTechFilter("ALL")}
+                  title="Clear technician filter"
+                  className="hover:text-red-500 font-black ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {searchQuery.trim() && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
+                <span>Search: &ldquo;{searchQuery}&rdquo;</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  title="Clear search"
+                  className="hover:text-red-500 font-black ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            <span className="text-slate-500 text-[11px] font-medium">
+              ({filteredTasks.length} {filteredTasks.length === 1 ? "task" : "tasks"} shown)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("ALL");
+              setCategoryFilter("ALL");
+              setTechFilter("ALL");
+              setSearchQuery("");
+            }}
+            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+          >
+            Reset All
+          </button>
+        </div>
+      )}
+
       {/* Tasks List */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -771,16 +990,33 @@ function ProjectTasksContent() {
           <span className="text-4xl">📋</span>
           <h3 className="font-bold text-base text-slate-800 dark:text-white">No Project Tasks Found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            {isAdmin ? "Click '+ New Project Task' above to assign an IT infrastructure deployment or scheduled maintenance." : "No tasks match your filter criteria."}
+            {statusFilter !== "ALL" || categoryFilter !== "ALL" || techFilter !== "ALL" || searchQuery.trim()
+              ? `No tasks match the active filters.`
+              : isAdmin
+              ? "Click '+ New Project Task' above to assign an IT infrastructure deployment or scheduled maintenance."
+              : "No tasks match your filter criteria."}
           </p>
-          {isAdmin && (
+          {statusFilter !== "ALL" || categoryFilter !== "ALL" || techFilter !== "ALL" || searchQuery.trim() ? (
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter("ALL");
+                setCategoryFilter("ALL");
+                setTechFilter("ALL");
+                setSearchQuery("");
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-md hover:bg-indigo-500 transition-all active:scale-95"
+            >
+              🔄 Reset Filters & Show All
+            </button>
+          ) : isAdmin ? (
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-md hover:bg-indigo-500 transition-all"
             >
               ➕ Create First Project Task
             </button>
-          )}
+          ) : null}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
