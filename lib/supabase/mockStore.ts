@@ -150,6 +150,7 @@ interface MockDbStore {
   audit_logs: MockAuditLog[];
   project_tasks: any[];
   project_task_reports: any[];
+  project_task_attachments: any[];
   system_settings: { key: string; value: any; updated_at?: string }[];
   sla_events: { id: string; ticket_id: string; event_type: string; created_at: string }[];
   ticket_seq: number;
@@ -277,6 +278,22 @@ function seedData(): MockDbStore {
         department_id: deptIT,
         location_id: locHeadOffice,
         support_group_id: sgSystems,
+        is_active: true,
+        created_at: oneDayAgo,
+        last_active_at: isoNow
+      },
+      {
+        id: "user-tech-eleni",
+        telegram_id: 479917304,
+        telegram_username: "emushetii",
+        first_name: "Eleni",
+        last_name: "Musheti",
+        photo_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+        phone: "+251 92 000 0008",
+        role: "TECHNICIAN",
+        department_id: deptIT,
+        location_id: locHeadOffice,
+        support_group_id: sgHardware,
         is_active: true,
         created_at: oneDayAgo,
         last_active_at: isoNow
@@ -701,7 +718,8 @@ function seedData(): MockDbStore {
         report_text: "Completed mounting APs in Zone B. Currently configuring RADIUS certificate trust profile on the controller.",
         progress: 60,
         status: "IN_PROGRESS",
-        created_at: new Date(now.getTime() - 3600000).toISOString()
+        created_at: new Date(now.getTime() - 3600000).toISOString(),
+        attachments: []
       },
       {
         id: "report-103",
@@ -710,9 +728,11 @@ function seedData(): MockDbStore {
         report_text: "Finished physical cabling and optical link tests. Cleaned connectors and verified 10Gbps line rate. Awaiting IT Manager 100% sign-off.",
         progress: 90,
         status: "WAITING_FOR_ADMIN",
-        created_at: new Date(now.getTime() - 1800000).toISOString()
+        created_at: new Date(now.getTime() - 1800000).toISOString(),
+        attachments: []
       }
     ],
+    project_task_attachments: [],
     sla_events: []
   };
 }

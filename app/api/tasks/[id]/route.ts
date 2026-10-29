@@ -82,10 +82,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       created_by: task.created_by_id ? usersMap.get(task.created_by_id) || null : null
     };
 
-    const reports = (rawReports ?? []).map((r: any) => ({
-      ...r,
-      technician: r.technician_id ? usersMap.get(r.technician_id) || null : null
-    }));
+    const reports = (rawReports ?? []).map((r: any) => {
+      let attachments: any[] = [];
+      try {
+        attachments = typeof r.attachments === "string" ? JSON.parse(r.attachments) : (r.attachments || []);
+      } catch {
+        attachments = [];
+      }
+      return {
+        ...r,
+        attachments,
+        technician: r.technician_id ? usersMap.get(r.technician_id) || null : null
+      };
+    });
 
     return NextResponse.json({ task: enrichedTask, reports });
   } catch (err) {

@@ -3,11 +3,11 @@
 import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { api } from "@/lib/apiClient";
+import { api, uploadTaskAttachment } from "@/lib/apiClient";
 import { useMe } from "@/lib/useMe";
 import { ExportModal } from "@/components/ExportModal";
 import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
-import type { DbProjectTask, DbProjectTaskReport, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
+import type { DbProjectTask, DbProjectTaskReport, TaskReportAttachment, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
 
 interface TechMember {
   id: string;
@@ -120,6 +120,12 @@ function ProjectTasksContent() {
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const isSubmittingRef = useRef(false);
 
+  // Report File Attachments (PDF, DOCX, Photos)
+  const [reportAttachments, setReportAttachments] = useState<File[]>([]);
+  const [uploadingAttachmentProgress, setUploadingAttachmentProgress] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+
   // Edit Assignees in Task Detail Drawer
   const [isEditingAssignees, setIsEditingAssignees] = useState(false);
   const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([]);
@@ -215,6 +221,8 @@ function ProjectTasksContent() {
       setReportProgress(res.task.progress);
       setReportStatus(res.task.status);
       setReportText("");
+      setReportAttachments([]);
+      setUploadingAttachmentProgress(null);
       const currentIds = (res.task.assigned_technicians && res.task.assigned_technicians.length > 0)
         ? res.task.assigned_technicians.map((t: any) => t.id)
         : (res.task.assigned_to_id ? [res.task.assigned_to_id] : []);
@@ -299,39 +307,81 @@ function ProjectTasksContent() {
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const newFiles = Array.from(e.target.files);
+
+    const validFiles: File[] = [];
+    for (const f of newFiles) {
+      if (f.size > 20 * 1024 * 1024) {
+        alert(`File "${f.name}" exceeds 20MB limit. Please choose a smaller file.`);
+        continue;
+      }
+      validFiles.push(f);
+    }
+
+    setReportAttachments((prev) => [...prev, ...validFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setReportAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTaskDetail) return;
     if (submittingReport || isSubmittingRef.current || reportSubmitted) return;
 
-    // Prevent duplicate submission if nothing changed and note is empty
+    // Prevent duplicate submission if nothing changed, note is empty, and no attachments
     const isUnchanged =
       reportProgress === selectedTaskDetail.task.progress &&
       reportStatus === selectedTaskDetail.task.status &&
-      !reportText.trim();
+      !reportText.trim() &&
+      reportAttachments.length === 0;
 
     if (isUnchanged) {
-      alert("Please adjust progress, change task status, or write a work note before submitting.");
+      alert("Please adjust progress, change task status, write a work note, or attach deliverables before submitting.");
       return;
     }
 
     isSubmittingRef.current = true;
     setSubmittingReport(true);
     try {
+      // 1. Upload any attachments first
+      const uploadedAttachments: TaskReportAttachment[] = [];
+      if (reportAttachments.length > 0) {
+        for (let i = 0; i < reportAttachments.length; i++) {
+          const file = reportAttachments[i];
+          setUploadingAttachmentProgress(`Uploading ${i + 1} of ${reportAttachments.length}: ${file.name}...`);
+          const res = await uploadTaskAttachment(selectedTaskDetail.task.id, file);
+          if (res?.attachment) {
+            uploadedAttachments.push(res.attachment);
+          }
+        }
+      }
+
+      setUploadingAttachmentProgress("Publishing report...");
+
       const finalNote =
         reportText.trim() ||
-        `Progress updated to ${reportProgress}% (${reportStatus.replace(/_/g, " ")})`;
+        (uploadedAttachments.length > 0
+          ? `Progress updated with ${uploadedAttachments.length} deliverable attachment(s) (${reportStatus.replace(/_/g, " ")})`
+          : `Progress updated to ${reportProgress}% (${reportStatus.replace(/_/g, " ")})`);
 
       await api(`/api/tasks/${selectedTaskDetail.task.id}/reports`, {
         method: "POST",
         body: JSON.stringify({
           reportText: finalNote,
           progress: reportProgress,
-          status: reportStatus
+          status: reportStatus,
+          attachments: uploadedAttachments
         })
       });
       setReportSubmitted(true);
       setReportText("");
+      setReportAttachments([]);
+      setUploadingAttachmentProgress(null);
 
       // Refresh detail and list
       await openTaskDetail(selectedTaskDetail.task.id);
@@ -344,6 +394,7 @@ function ProjectTasksContent() {
       alert(err.message || "Failed to submit work report");
     } finally {
       setSubmittingReport(false);
+      setUploadingAttachmentProgress(null);
       isSubmittingRef.current = false;
     }
   };
@@ -1886,6 +1937,83 @@ function ProjectTasksContent() {
                       <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                         {rep.report_text}
                       </p>
+
+                      {rep.attachments && rep.attachments.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block flex items-center gap-1">
+                            <span>📎</span>
+                            <span>Attached Deliverables ({rep.attachments.length})</span>
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {rep.attachments.map((att) => {
+                              const isImg = att.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
+                              const isPdf = att.type === "application/pdf" || /\.pdf$/i.test(att.name);
+                              const isDoc = att.type?.includes("word") || /\.(docx?)$/i.test(att.name);
+
+                              return (
+                                <div
+                                  key={att.id}
+                                  className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all text-xs gap-2"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {isImg ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLightboxImage({ url: att.url, name: att.name })}
+                                        className="relative w-8 h-8 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 shrink-0 group/thumb bg-slate-200 dark:bg-slate-800"
+                                        title="Click to view photo full size"
+                                      >
+                                        <img
+                                          src={att.url}
+                                          alt={att.name}
+                                          className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform"
+                                        />
+                                      </button>
+                                    ) : (
+                                      <span className="text-xl shrink-0">
+                                        {isPdf ? "📄" : isDoc ? "📝" : "📎"}
+                                      </span>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-slate-800 dark:text-slate-200 truncate text-[11px]" title={att.name}>
+                                        {att.name}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400">
+                                        {att.size ? `${Math.round(att.size / 1024)} KB • ` : ""}
+                                        {isImg ? "Photo" : isPdf ? "PDF Document" : isDoc ? "Word Document" : "Attachment"}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {isImg && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLightboxImage({ url: att.url, name: att.name })}
+                                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                                        title="View Fullscreen"
+                                      >
+                                        🔍 View
+                                      </button>
+                                    )}
+                                    <a
+                                      href={att.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download={!isPdf && !isImg ? att.name : undefined}
+                                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-1"
+                                      title={isPdf ? "Open PDF" : isDoc ? "Download Word Doc" : "Open File"}
+                                    >
+                                      <span>{isPdf ? "View PDF" : isDoc ? "Download" : "Open"}</span>
+                                      <span className="text-[9px]">↗</span>
+                                    </a>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1909,6 +2037,87 @@ function ProjectTasksContent() {
                 onChange={(e) => setReportText(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
+
+              {/* Attachment Picker & Previews (PDF, Word DOCX, Photos) */}
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  multiple
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
+                    <span>📎</span>
+                    <span>Attach Deliverables (PDF, Word DOCX, or Photos)</span>
+                  </label>
+                  {reportAttachments.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setReportAttachments([])}
+                      className="text-[10px] text-rose-500 hover:text-rose-600 font-semibold"
+                    >
+                      Clear all ({reportAttachments.length})
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-xl p-3 text-center cursor-pointer bg-white/60 dark:bg-slate-900/40 hover:bg-white dark:hover:bg-slate-900 transition-all flex flex-col items-center justify-center gap-1 group"
+                >
+                  <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs group-hover:scale-105 transition-transform">
+                    <span>📸 / 📄 / 📝</span>
+                    <span>Click to add PDF, Word DOCX, or Photos</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Supports PDFs, Word documents (.docx/.doc), and photos (JPG, PNG, WEBP) up to 20MB
+                  </p>
+                </div>
+
+                {reportAttachments.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {reportAttachments.map((f, idx) => {
+                      const isImage = f.type.startsWith("image/");
+                      const isPdf = f.type === "application/pdf" || f.name.endsWith(".pdf");
+                      const isDoc = f.type.includes("word") || f.name.endsWith(".docx") || f.name.endsWith(".doc");
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-xs gap-2"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-base shrink-0">
+                              {isImage ? "🖼️" : isPdf ? "📄" : isDoc ? "📝" : "📎"}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 truncate text-[11px]">{f.name}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {Math.round(f.size / 1024)} KB • {isImage ? "Photo" : isPdf ? "PDF" : isDoc ? "Word Doc" : "File"}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSelectedFile(idx);
+                            }}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors shrink-0"
+                            title="Remove attachment"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div className="space-y-1">
@@ -1992,14 +2201,15 @@ function ProjectTasksContent() {
                   (selectedTaskDetail.task.status === "COMPLETED" &&
                     reportStatus === "COMPLETED" &&
                     reportProgress === 100 &&
-                    !reportText.trim())
+                    !reportText.trim() &&
+                    reportAttachments.length === 0)
                 }
                 className={`w-full py-3 rounded-xl font-bold text-white shadow-md transition-all active:scale-[0.98] ${
                   reportSubmitted
                     ? "bg-emerald-600 cursor-not-allowed scale-[1.01]"
                     : submittingReport
                     ? "bg-indigo-700 opacity-60 cursor-not-allowed"
-                    : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim()
+                    : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim() && reportAttachments.length === 0
                     ? "bg-slate-700 text-slate-300 opacity-80 cursor-not-allowed"
                     : "bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
                 }`}
@@ -2007,15 +2217,17 @@ function ProjectTasksContent() {
                 {submittingReport ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Publishing Report...</span>
+                    <span>{uploadingAttachmentProgress || "Publishing Report..."}</span>
                   </span>
                 ) : reportSubmitted ? (
                   <span className="flex items-center justify-center gap-1.5">
                     <span>✅</span>
                     <span>Submitted Successfully!</span>
                   </span>
-                ) : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim() ? (
-                  <span>🎉 Task Completed (Type note to post addendum)</span>
+                ) : selectedTaskDetail.task.status === "COMPLETED" && !reportText.trim() && reportAttachments.length === 0 ? (
+                  <span>🎉 Task Completed (Type note or attach files to post addendum)</span>
+                ) : reportAttachments.length > 0 ? (
+                  <span>🚀 Submit Work Report with {reportAttachments.length} Attachment(s)</span>
                 ) : reportStatus === "WAITING_FOR_ADMIN" && !isAdmin ? (
                   <span>🚀 Submit Work as Done & Request Admin Review (Yes/No)</span>
                 ) : reportStatus === "COMPLETED" && isAdmin ? (
@@ -2025,6 +2237,47 @@ function ProjectTasksContent() {
                 )}
               </button>
             </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox for Full-Resolution Image/Photo Preview */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between p-3 bg-slate-950/80 border-b border-slate-800 text-white text-xs">
+              <span className="font-bold truncate max-w-md">📸 {lightboxImage.name}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={lightboxImage.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] transition-all"
+                >
+                  Open Original ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(null)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="p-3 overflow-auto flex items-center justify-center max-h-[80vh] w-full bg-slate-950/50">
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.name}
+                className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-lg"
+              />
             </div>
           </div>
         </div>
@@ -2068,7 +2321,8 @@ function ProjectTasksContent() {
             "Progress Milestone (%)",
             "Status Milestone",
             "Timestamp",
-            "Work Log / Report Notes"
+            "Work Log / Report Notes",
+            "Attached Deliverables"
           ]}
           rows={
             selectedTaskDetail.reports.length > 0
@@ -2079,7 +2333,8 @@ function ProjectTasksContent() {
                   `${rep.progress}%`,
                   rep.status,
                   new Date(rep.created_at).toLocaleString(),
-                  rep.report_text || "No notes"
+                  rep.report_text || "No notes",
+                  rep.attachments && rep.attachments.length > 0 ? rep.attachments.map((a: any) => a.name).join(", ") : "None"
                 ])
               : [
                   [
@@ -2089,7 +2344,8 @@ function ProjectTasksContent() {
                     `${selectedTaskDetail.task.progress}%`,
                     selectedTaskDetail.task.status,
                     new Date(selectedTaskDetail.task.created_at).toLocaleString(),
-                    selectedTaskDetail.task.goal || "Initial task creation"
+                    selectedTaskDetail.task.goal || "Initial task creation",
+                    "None"
                   ]
                 ]
           }

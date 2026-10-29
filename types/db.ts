@@ -76,6 +76,14 @@ export interface DbProjectTask {
   updated_at: string;
 }
 
+export interface TaskReportAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+}
+
 export interface DbProjectTaskReport {
   id: string;
   task_id: string;
@@ -83,5 +91,18 @@ export interface DbProjectTaskReport {
   report_text: string;
   progress: number;
   status: ProjectTaskStatus;
+  created_at: string;
+  attachments?: TaskReportAttachment[];
+}
+
+export interface DbProjectTaskAttachment {
+  id: string;
+  task_id: string;
+  report_id: string | null;
+  uploaded_by: string | null;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  file_data?: string;
   created_at: string;
 }

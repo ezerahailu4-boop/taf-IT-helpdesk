@@ -16,7 +16,14 @@ export const dynamic = "force-dynamic";
 const submitReportSchema = z.object({
   reportText: z.string().max(4000).optional().nullable(),
   progress: z.number().min(0).max(100),
-  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "WAITING_FOR_ADMIN", "COMPLETED"]).default("IN_PROGRESS")
+  status: z.enum(["PENDING", "IN_PROGRESS", "BLOCKED", "WAITING_FOR_ADMIN", "COMPLETED"]).default("IN_PROGRESS"),
+  attachments: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    size: z.number(),
+    url: z.string()
+  })).optional().default([])
 });
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -127,6 +134,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     // 3. Insert report entry
+    const attachmentsData = body.attachments || [];
     const { data: report, error: reportErr } = await db
       .from("project_task_reports")
       .insert({
@@ -134,15 +142,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         technician_id: reportingUser.id,
         report_text: effectiveReportText,
         progress: finalProgress,
-        status: finalStatus
+        status: finalStatus,
+        attachments: JSON.stringify(attachmentsData)
       })
       .select("*")
       .single();
 
     if (reportErr) throw new Error(reportErr.message);
 
+    // Link uploaded attachments to this report
+    if (attachmentsData.length > 0) {
+      const attachmentIds = attachmentsData.map((a) => a.id);
+      await db
+        .from("project_task_attachments")
+        .update({ report_id: report.id })
+        .in("id", attachmentIds);
+    }
+
+    let parsedAttachments: any[] = [];
+    try {
+      parsedAttachments = typeof report.attachments === "string" ? JSON.parse(report.attachments) : (report.attachments || []);
+    } catch {
+      parsedAttachments = attachmentsData;
+    }
+
     const enrichedReport = {
       ...report,
+      attachments: parsedAttachments,
       technician: {
         id: reportingUser.id,
         first_name: reportingUser.first_name,
@@ -175,16 +201,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (updateErr) throw new Error(updateErr.message);
 
+    // Prepare note with attachment indicator for notifications if attached
+    const attachmentNote = attachmentsData.length > 0
+      ? `${effectiveReportText}\n📎 Attached: ${attachmentsData.map(a => a.name).join(", ")}`
+      : effectiveReportText;
+
     // 5. Send appropriate Telegram Notifications
     if (isManagerApproved) {
       // IT Manager finalized 100% completion -> Notify assigned technician(s)
-      await notifyProjectTaskApproved100(db, updatedTask as DbProjectTask, user, effectiveReportText);
+      await notifyProjectTaskApproved100(db, updatedTask as DbProjectTask, user, attachmentNote);
     } else if (isTechnicianCompletion) {
       // Technician submitted completion -> Notify IT Manager(s) to sign off
-      await notifyProjectTaskAwaitingSignOff(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText);
+      await notifyProjectTaskAwaitingSignOff(db, updatedTask as DbProjectTask, reportingUser, attachmentNote);
     } else {
       // Regular in-progress update
-      await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, reportingUser, effectiveReportText, false);
+      await notifyProjectTaskUpdated(db, updatedTask as DbProjectTask, reportingUser, attachmentNote, false);
     }
 
     return NextResponse.json({

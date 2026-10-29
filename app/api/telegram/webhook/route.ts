@@ -41,9 +41,9 @@ export async function POST(req: NextRequest) {
 
 async function upsertUserFromTelegram(db: ReturnType<typeof supabaseAdmin>, from: any) {
   const username = (from.username || "").toLowerCase();
-  const TECH_USERNAMES = ["tinsu2025", "mati20", "kirabelll", "ik8927"];
+  const TECH_USERNAMES = ["tinsu2025", "mati20", "kirabelll", "ik8927", "emushetii"];
   const ADMIN_USERNAMES = ["ezrsh_404", "not_adonay", "kalkidangebyehu"];
-  const TECH_IDS = ["6319536255", "7434354672"];
+  const TECH_IDS = ["6319536255", "7434354672", "479917304"];
   const ADMIN_IDS = ["883942515", "2074368152", "205797800"];
 
   const isDesignatedAdmin = ADMIN_IDS.includes(String(from.id)) || ADMIN_USERNAMES.includes(username);

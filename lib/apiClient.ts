@@ -95,3 +95,25 @@ export async function uploadFile(file: File, ticketId: string) {
   if (!res.ok) throw new ApiError(data?.error || "Upload failed", res.status);
   return data;
 }
+
+export async function uploadTaskAttachment(taskId: string, file: File, reportId?: string) {
+  const initData = getInitData();
+  const demoRole = typeof window !== "undefined" ? localStorage.getItem("it_helpdesk_demo_role") || "" : "";
+
+  const form = new FormData();
+  form.append("file", file);
+  if (reportId) form.append("reportId", reportId);
+
+  const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+    method: "POST",
+    headers: {
+      "x-telegram-init-data": initData,
+      ...(demoRole ? { "x-demo-role": demoRole } : {})
+    },
+    body: form
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new ApiError(data?.error || "Failed to upload task attachment", res.status);
+  return data as { attachment: { id: string; name: string; type: string; size: number; url: string } };
+}
