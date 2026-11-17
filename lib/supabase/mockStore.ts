@@ -151,6 +151,7 @@ interface MockDbStore {
   project_tasks: any[];
   project_task_reports: any[];
   project_task_attachments: any[];
+  project_subtasks: any[];
   system_settings: { key: string; value: any; updated_at?: string }[];
   sla_events: { id: string; ticket_id: string; event_type: string; created_at: string }[];
   ticket_seq: number;
@@ -733,6 +734,7 @@ function seedData(): MockDbStore {
       }
     ],
     project_task_attachments: [],
+    project_subtasks: [],
     sla_events: []
   };
 }

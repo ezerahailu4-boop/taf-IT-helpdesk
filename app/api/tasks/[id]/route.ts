@@ -51,6 +51,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .eq("task_id", params.id)
       .order("created_at", { ascending: false });
 
+    // Fetch subtasks
+    const { data: rawSubtasks } = await db
+      .from("project_subtasks")
+      .select("*")
+      .eq("task_id", params.id)
+      .order("due_date", { ascending: true })
+      .order("created_at", { ascending: true });
+
     const assignedTechIds: string[] = (task.assigned_technician_ids && task.assigned_technician_ids.length > 0)
       ? task.assigned_technician_ids
       : (task.assigned_to_id ? [task.assigned_to_id] : []);
@@ -62,7 +70,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           task.assigned_to_id,
           ...assignedTechIds,
           task.created_by_id,
-          ...(rawReports ?? []).map((r: any) => r.technician_id)
+          ...(rawReports ?? []).map((r: any) => r.technician_id),
+          ...(rawSubtasks ?? []).flatMap((s: any) => [s.assigned_to_id, s.completed_by_id, s.created_by_id])
         ].filter(Boolean)
       )
     );
@@ -96,7 +105,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       };
     });
 
-    return NextResponse.json({ task: enrichedTask, reports });
+    const subtasks = (rawSubtasks ?? []).map((s: any) => ({
+      ...s,
+      assigned_to: s.assigned_to_id ? usersMap.get(s.assigned_to_id) || null : null,
+      completed_by: s.completed_by_id ? usersMap.get(s.completed_by_id) || null : null,
+      created_by: s.created_by_id ? usersMap.get(s.created_by_id) || null : null
+    }));
+
+    return NextResponse.json({ task: enrichedTask, reports, subtasks });
   } catch (err) {
     return errorResponse(err);
   }

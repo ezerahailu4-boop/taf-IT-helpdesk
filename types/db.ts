@@ -106,3 +106,20 @@ export interface DbProjectTaskAttachment {
   file_data?: string;
   created_at: string;
 }
+
+export type SubtaskStatus = "PENDING" | "COMPLETED";
+
+export interface DbProjectSubtask {
+  id: string;
+  task_id: string;
+  title: string;
+  description?: string | null;
+  assigned_to_id: string | null;
+  due_date: string;
+  status: SubtaskStatus;
+  completed_at?: string | null;
+  completed_by_id?: string | null;
+  created_by_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}

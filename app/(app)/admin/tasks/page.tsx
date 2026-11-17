@@ -7,7 +7,7 @@ import { api, uploadTaskAttachment } from "@/lib/apiClient";
 import { useMe } from "@/lib/useMe";
 import { ExportModal } from "@/components/ExportModal";
 import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
-import type { DbProjectTask, DbProjectTaskReport, TaskReportAttachment, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
+import type { DbProjectTask, DbProjectTaskReport, TaskReportAttachment, DbProjectSubtask, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
 
 interface TechMember {
   id: string;
@@ -50,9 +50,16 @@ interface TasksResponse {
   };
 }
 
+export interface SubtaskWithDetails extends DbProjectSubtask {
+  assigned_to?: TechMember | null;
+  completed_by?: TechMember | null;
+  created_by?: TechMember | null;
+}
+
 interface TaskDetailResponse {
   task: TaskWithDetails;
   reports: (DbProjectTaskReport & { technician?: TechMember })[];
+  subtasks?: SubtaskWithDetails[];
 }
 
 const priorityColors: Record<ProjectTaskPriority, { bg: string; text: string; dot: string }> = {
@@ -125,6 +132,15 @@ function ProjectTasksContent() {
   const [uploadingAttachmentProgress, setUploadingAttachmentProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+
+  // Daily Sub-Tasks States
+  const [subtasks, setSubtasks] = useState<SubtaskWithDetails[]>([]);
+  const [showAddSubtask, setShowAddSubtask] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState("");
+  const [savingSubtask, setSavingSubtask] = useState(false);
+  const [togglingSubtaskId, setTogglingSubtaskId] = useState<string | null>(null);
 
   // Edit Assignees in Task Detail Drawer
   const [isEditingAssignees, setIsEditingAssignees] = useState(false);
@@ -223,6 +239,15 @@ function ProjectTasksContent() {
       setReportText("");
       setReportAttachments([]);
       setUploadingAttachmentProgress(null);
+      setSubtasks(res.subtasks || []);
+      setShowAddSubtask(false);
+      setNewSubtaskTitle("");
+      const todayDateStr = new Date().toISOString().split("T")[0];
+      setNewSubtaskDueDate(todayDateStr);
+      const defaultTechId = (res.task.assigned_technicians && res.task.assigned_technicians.length > 0)
+        ? res.task.assigned_technicians[0].id
+        : (res.task.assigned_to_id || "");
+      setNewSubtaskAssigneeId(defaultTechId);
       const currentIds = (res.task.assigned_technicians && res.task.assigned_technicians.length > 0)
         ? res.task.assigned_technicians.map((t: any) => t.id)
         : (res.task.assigned_to_id ? [res.task.assigned_to_id] : []);
@@ -396,6 +421,75 @@ function ProjectTasksContent() {
       setSubmittingReport(false);
       setUploadingAttachmentProgress(null);
       isSubmittingRef.current = false;
+    }
+  };
+
+  const handleCreateSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTaskDetail || !newSubtaskTitle.trim() || savingSubtask) return;
+    setSavingSubtask(true);
+    try {
+      const res = await api<{ subtask: SubtaskWithDetails }>(`/api/tasks/${selectedTaskDetail.task.id}/subtasks`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: newSubtaskTitle.trim(),
+          dueDate: newSubtaskDueDate,
+          assignedToId: newSubtaskAssigneeId || undefined
+        })
+      });
+      setSubtasks((prev) => [...prev, res.subtask]);
+      setNewSubtaskTitle("");
+      setShowAddSubtask(false);
+    } catch (err: any) {
+      alert(err.message || "Failed to create daily sub-task");
+    } finally {
+      setSavingSubtask(false);
+    }
+  };
+
+  const handleToggleSubtask = async (subtaskId: string, currentStatus: string) => {
+    if (!selectedTaskDetail || togglingSubtaskId) return;
+    const newStatus = currentStatus === "COMPLETED" ? "PENDING" : "COMPLETED";
+    setTogglingSubtaskId(subtaskId);
+    try {
+      const res = await api<{ subtask: SubtaskWithDetails; stats: { total: number; completed: number; percentage: number } }>(
+        `/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: newStatus })
+        }
+      );
+      setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? res.subtask : s)));
+    } catch (err: any) {
+      alert(err.message || "Failed to update sub-task status");
+    } finally {
+      setTogglingSubtaskId(null);
+    }
+  };
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    if (!selectedTaskDetail) return;
+    if (!confirm("Are you sure you want to delete this daily sub-task?")) return;
+    try {
+      await api(`/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`, {
+        method: "DELETE"
+      });
+      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+    } catch (err: any) {
+      alert(err.message || "Failed to delete sub-task");
+    }
+  };
+
+  const completedSubtasksCount = subtasks.filter((s) => s.status === "COMPLETED").length;
+  const subtaskCompletionPercent = subtasks.length > 0 ? Math.round((completedSubtasksCount / subtasks.length) * 100) : 0;
+
+  const handleApplySubtaskProgress = () => {
+    if (!selectedTaskDetail || subtasks.length === 0) return;
+    setReportProgress(subtaskCompletionPercent);
+    if (subtaskCompletionPercent >= 90 && !isAdmin) {
+      setReportStatus("WAITING_FOR_ADMIN");
+    } else if (subtaskCompletionPercent === 100 && isAdmin) {
+      setReportStatus("COMPLETED");
     }
   };
 
@@ -1832,6 +1926,321 @@ function ProjectTasksContent() {
                       );
                     })}
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* 📋 Daily Sub-Tasks & Action Plan */}
+            <div className="bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📋</span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider">
+                        Daily Sub-Tasks & Action Plan
+                      </h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        completedSubtasksCount === subtasks.length && subtasks.length > 0
+                          ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                          : "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                      }`}>
+                        {subtasks.length > 0 ? `${completedSubtasksCount}/${subtasks.length} Done` : "0 Sub-Tasks"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Break down fieldwork into daily action items assigned to technicians
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {subtasks.length > 0 && subtaskCompletionPercent !== reportProgress && (
+                    <button
+                      type="button"
+                      onClick={handleApplySubtaskProgress}
+                      className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 hover:bg-purple-100 border border-purple-200 dark:border-purple-800 transition-all flex items-center gap-1 active:scale-95 shadow-xs"
+                      title="Set progress slider to match completed sub-tasks"
+                    >
+                      <span>⚡ Sync to Progress (${subtaskCompletionPercent}%)</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSubtask((prev) => !prev)}
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all flex items-center gap-1 active:scale-95"
+                  >
+                    <span>{showAddSubtask ? "✕ Cancel" : "➕ Add Daily Sub-Task"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Subtask Progress Bar */}
+              {subtasks.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-slate-500">
+                    <span>Daily Checklist Progress</span>
+                    <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">${subtaskCompletionPercent}% Completed</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        subtaskCompletionPercent === 100 ? "bg-emerald-500" : "bg-indigo-600"
+                      }`}
+                      style={{ width: `${subtaskCompletionPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Add Subtask Form */}
+              {showAddSubtask && (
+                <form onSubmit={handleCreateSubtask} className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/50 shadow-sm space-y-3 animate-in fade-in duration-150 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white block text-[11px]">
+                    ➕ Add Daily Action Item
+                  </span>
+
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mount patch panel on Rack B, crimp cat6 cables, test 10G uplink..."
+                      value={newSubtaskTitle}
+                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      required
+                      autoFocus
+                      className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Target Date */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Target Date</label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setNewSubtaskDueDate(new Date().toISOString().split("T")[0])}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              newSubtaskDueDate === new Date().toISOString().split("T")[0]
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
+                            Today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 1);
+                              setNewSubtaskDueDate(d.toISOString().split("T")[0]);
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              newSubtaskDueDate !== new Date().toISOString().split("T")[0]
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
+                            Tomorrow
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="date"
+                        value={newSubtaskDueDate}
+                        onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-xs"
+                      />
+                    </div>
+
+                    {/* Assignee Selector (pre-populated from task's assigned technicians) */}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        Assignee Technician
+                      </label>
+                      <select
+                        value={newSubtaskAssigneeId}
+                        onChange={(e) => setNewSubtaskAssigneeId(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-semibold text-xs"
+                      >
+                        <optgroup label="Task Assigned Technicians">
+                          {(selectedTaskDetail.task.assigned_technicians && selectedTaskDetail.task.assigned_technicians.length > 0
+                            ? selectedTaskDetail.task.assigned_technicians
+                            : selectedTaskDetail.task.assigned_to
+                            ? [selectedTaskDetail.task.assigned_to]
+                            : []
+                          ).map((tech: any) => (
+                            <option key={tech.id} value={tech.id}>
+                              👨‍💻 {tech.first_name} {tech.last_name || ""} {tech.telegram_username ? `(@${tech.telegram_username})` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {data?.technicians && (
+                          <optgroup label="Other IT Technicians">
+                            {data.technicians
+                              .filter((t) => {
+                                const isAlready =
+                                  selectedTaskDetail.task.assigned_to_id === t.id ||
+                                  (selectedTaskDetail.task.assigned_technician_ids &&
+                                    selectedTaskDetail.task.assigned_technician_ids.includes(t.id));
+                                return !isAlready;
+                              })
+                              .map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  👤 {t.first_name} {t.last_name || ""} (@{t.telegram_username || "tech"})
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSubtask(false)}
+                      className="px-3 py-1.5 rounded-xl font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingSubtask || !newSubtaskTitle.trim()}
+                      className="px-4 py-1.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
+                    >
+                      {savingSubtask ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Dispatching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🚀 Assign Daily Sub-Task</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Subtasks List */}
+              {subtasks.length === 0 ? (
+                <div className="text-center py-5 bg-white dark:bg-slate-900/60 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-3">
+                  <p className="text-xs text-slate-400">No daily sub-tasks added yet.</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Click "➕ Add Daily Sub-Task" above to schedule specific actions for today or this week.</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                  {subtasks.map((st) => {
+                    const isDone = st.status === "COMPLETED";
+                    const todayDateStr = new Date().toISOString().split("T")[0];
+                    const isToday = st.due_date === todayDateStr;
+                    const isOverdue = !isDone && st.due_date < todayDateStr;
+                    const isBusy = togglingSubtaskId === st.id;
+
+                    return (
+                      <div
+                        key={st.id}
+                        className={`p-2.5 rounded-xl border transition-all flex items-start justify-between gap-2.5 text-xs ${
+                          isDone
+                            ? "bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 opacity-75"
+                            : isOverdue
+                            ? "bg-red-50/60 dark:bg-red-950/20 border-red-200 dark:border-red-900/40"
+                            : isToday
+                            ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 shadow-xs"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          {/* Checkbox */}
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleToggleSubtask(st.id, st.status)}
+                            className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                              isDone
+                                ? "bg-emerald-600 border-emerald-600 text-white"
+                                : "border-slate-300 dark:border-slate-600 hover:border-indigo-500 bg-white dark:bg-slate-800"
+                            }`}
+                            title={isDone ? "Mark as pending" : "Mark as completed"}
+                          >
+                            {isBusy ? (
+                              <span className="w-2.5 h-2.5 border border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                            ) : isDone ? (
+                              <span className="text-[10px] font-black">✓</span>
+                            ) : null}
+                          </button>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`font-semibold text-xs break-words ${
+                                  isDone
+                                    ? "line-through text-slate-400 dark:text-slate-500"
+                                    : "text-slate-900 dark:text-white"
+                                }`}
+                              >
+                                {st.title}
+                              </span>
+
+                              {/* Date badge */}
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  isDone
+                                    ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+                                    : isOverdue
+                                    ? "bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400"
+                                    : isToday
+                                    ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-extrabold"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                                }`}
+                              >
+                                {isDone ? "✅ Completed" : isOverdue ? "⚠️ Overdue" : isToday ? "🔥 Today" : `📅 ${st.due_date}`}
+                              </span>
+                            </div>
+
+                            {/* Assignee & completed info */}
+                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 flex-wrap">
+                              {st.assigned_to && (
+                                <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+                                  <span>👨‍💻</span>
+                                  <span>{st.assigned_to.first_name} {st.assigned_to.last_name || ""}</span>
+                                  {st.assigned_to.telegram_username && (
+                                    <span className="opacity-70 font-mono">(@{st.assigned_to.telegram_username})</span>
+                                  )}
+                                </span>
+                              )}
+                              {isDone && st.completed_by && (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                  • Done by {st.completed_by.first_name}
+                                </span>
+                              )}
+                              {isDone && st.completed_at && (
+                                <span>
+                                  ({new Date(st.completed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Admin Delete Action */}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubtask(st.id)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0"
+                            title="Delete sub-task"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessage, miniAppButton } from "@/lib/telegram/bot";
-import type { DbTicket, DbUser, DbProjectTask } from "@/types/db";
+import type { DbTicket, DbUser, DbProjectTask, DbProjectSubtask } from "@/types/db";
 
 const priorityEmoji: Record<string, string> = {
   LOW: "🟢", MEDIUM: "🟡", HIGH: "🟠", CRITICAL: "🔴"
@@ -610,6 +610,62 @@ export async function notifyProjectTaskRevisionsRequested(
     if ((tech as DbUser).telegram_id && String((tech as DbUser).telegram_id) !== String(adminUser.telegram_id)) {
       await sendMessage((tech as DbUser).telegram_id, text, {
         buttons: [[miniAppButton("📋 Open Task & Update Work", `/admin/tasks?taskId=${task.id}`)]],
+        parseMode: "HTML"
+      });
+    }
+  }
+}
+
+export async function notifyProjectSubtaskAssigned(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  subtask: DbProjectSubtask,
+  technician: DbUser,
+  adminUser?: DbUser | null
+) {
+  if (!technician?.telegram_id) return;
+  const adminName = adminUser ? `${adminUser.first_name || "Admin"} ${adminUser.last_name || ""}`.trim() : "Admin";
+
+  const text =
+    `📌 <b>NEW DAILY SUB-TASK ASSIGNED</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Project Task:</b> <b>${task.title}</b>\n` +
+    `🎯 <b>Daily Action:</b> <b>${subtask.title}</b>\n` +
+    (subtask.description ? `📝 <i>"${subtask.description}"</i>\n` : "") +
+    `📅 <b>Target Date:</b> <code>${subtask.due_date}</code>\n` +
+    `👤 <b>Assigned By:</b> ${adminName}${adminUser?.telegram_username ? ` (@${adminUser.telegram_username})` : ""}\n\n` +
+    `<i>Check off this sub-task once completed to update task progress.</i>`;
+
+  await sendMessage(technician.telegram_id, text, {
+    buttons: [
+      [miniAppButton("🎯 Open Task & Checklist", `/admin/tasks?taskId=${task.id}`)]
+    ],
+    parseMode: "HTML"
+  });
+}
+
+export async function notifyProjectSubtaskCompleted(
+  db: SupabaseClient,
+  task: DbProjectTask,
+  subtask: DbProjectSubtask,
+  completedByUser: DbUser
+) {
+  const { data: admins } = await db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true);
+  if (!admins || admins.length === 0) return;
+
+  const techName = `${completedByUser.first_name ?? "Technician"} ${completedByUser.last_name ?? ""}`.trim();
+  const text =
+    `✅ <b>DAILY SUB-TASK COMPLETED</b>\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <b>Project Task:</b> <b>${task.title}</b>\n` +
+    `🎯 <b>Sub-Task:</b> <b>${subtask.title}</b>\n` +
+    `👨‍💻 <b>Completed By:</b> ${techName} (@${completedByUser.telegram_username || "tech"})\n` +
+    `📅 <b>Date:</b> <code>${subtask.due_date}</code>`;
+
+  for (const admin of admins) {
+    if ((admin as DbUser).telegram_id && String((admin as DbUser).telegram_id) !== String(completedByUser.telegram_id)) {
+      await sendMessage((admin as DbUser).telegram_id, text, {
+        buttons: [[miniAppButton("📋 View Task Progress", `/admin/tasks?taskId=${task.id}`)]],
         parseMode: "HTML"
       });
     }
