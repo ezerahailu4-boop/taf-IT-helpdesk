@@ -141,6 +141,8 @@ function ProjectTasksContent() {
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState("");
   const [savingSubtask, setSavingSubtask] = useState(false);
   const [togglingSubtaskId, setTogglingSubtaskId] = useState<string | null>(null);
+  const [subtaskInputError, setSubtaskInputError] = useState<string | null>(null);
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
 
   // Edit Assignees in Task Detail Drawer
   const [isEditingAssignees, setIsEditingAssignees] = useState(false);
@@ -426,7 +428,13 @@ function ProjectTasksContent() {
 
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTaskDetail || !newSubtaskTitle.trim() || savingSubtask) return;
+    if (!selectedTaskDetail || savingSubtask) return;
+    if (!newSubtaskTitle.trim()) {
+      setSubtaskInputError("Please type a sub-task title before assigning.");
+      subtaskInputRef.current?.focus();
+      return;
+    }
+    setSubtaskInputError(null);
     setSavingSubtask(true);
     try {
       const res = await api<{ subtask: SubtaskWithDetails }>(`/api/tasks/${selectedTaskDetail.task.id}/subtasks`, {
@@ -1981,7 +1989,7 @@ function ProjectTasksContent() {
                 <div className="space-y-1">
                   <div className="flex justify-between text-[10px] font-semibold text-slate-500">
                     <span>Daily Checklist Progress</span>
-                    <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">${subtaskCompletionPercent}% Completed</span>
+                    <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{subtaskCompletionPercent}% Completed</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                     <div
@@ -2001,16 +2009,51 @@ function ProjectTasksContent() {
                     ➕ Add Daily Action Item
                   </span>
 
-                  <div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                      <span>Sub-Task Action / Title <span className="text-rose-500">*</span></span>
+                      <span className="text-[10px] text-slate-400 font-normal">Type what needs to be done</span>
+                    </label>
                     <input
+                      ref={subtaskInputRef}
                       type="text"
-                      placeholder="e.g. Mount patch panel on Rack B, crimp cat6 cables, test 10G uplink..."
+                      placeholder="Type a daily sub-task here (e.g. Mount patch panel)..."
                       value={newSubtaskTitle}
-                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                      required
-                      autoFocus
-                      className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs"
+                      onChange={(e) => {
+                        setNewSubtaskTitle(e.target.value);
+                        if (subtaskInputError) setSubtaskInputError(null);
+                      }}
+                      className={`w-full p-2.5 rounded-xl border bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:italic focus:ring-2 focus:ring-indigo-500 focus:outline-none text-xs transition-colors ${
+                        subtaskInputError
+                          ? "border-rose-500 ring-1 ring-rose-500/30"
+                          : "border-slate-300 dark:border-slate-700"
+                      }`}
                     />
+
+                    {subtaskInputError && (
+                      <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 animate-in fade-in">
+                        <span>⚠️</span>
+                        <span>{subtaskInputError}</span>
+                      </p>
+                    )}
+
+                    {/* Quick suggestion tags */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] text-slate-400">Suggestions:</span>
+                      {["Inspect & diagnose issue", "Mount hardware & cabling", "Configure & test settings", "Final verification & handover"].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => {
+                            setNewSubtaskTitle(suggestion);
+                            if (subtaskInputError) setSubtaskInputError(null);
+                          }}
+                          className="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-colors"
+                        >
+                          + {suggestion}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -2108,8 +2151,8 @@ function ProjectTasksContent() {
                     </button>
                     <button
                       type="submit"
-                      disabled={savingSubtask || !newSubtaskTitle.trim()}
-                      className="px-4 py-1.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
+                      disabled={savingSubtask}
+                      className="px-4 py-1.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                     >
                       {savingSubtask ? (
                         <>
