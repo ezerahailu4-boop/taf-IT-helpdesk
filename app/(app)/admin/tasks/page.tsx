@@ -40,6 +40,8 @@ interface TasksResponse {
     inProgress: number;
     pending: number;
     overdue: number;
+    blocked?: number;
+    cancelled?: number;
     completionRate: number;
   };
   technicians: TechMember[];
@@ -554,7 +556,12 @@ function ProjectTasksContent() {
       if (statusFilter === "ALL") {
         matchStatus = true;
       } else if (statusFilter === "OVERDUE") {
-        matchStatus = t.status !== "COMPLETED" && Boolean(t.deadline) && new Date(t.deadline).getTime() < now;
+        matchStatus =
+          t.status !== "COMPLETED" &&
+          t.status !== "BLOCKED" &&
+          t.status !== "CANCELLED" &&
+          Boolean(t.deadline) &&
+          new Date(t.deadline).getTime() < now;
       } else {
         matchStatus = t.status === statusFilter;
       }
@@ -772,7 +779,7 @@ function ProjectTasksContent() {
         )}
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-3 border-t border-white/10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-3 border-t border-white/10">
           {/* Card 1: Total Tasks */}
           <button
             type="button"
@@ -860,7 +867,33 @@ function ProjectTasksContent() {
             </p>
           </button>
 
-          {/* Card 5: Overdue */}
+          {/* Card 5: Blocked */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "BLOCKED" ? "ALL" : "BLOCKED")}
+            title="Filter by Blocked tasks"
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between ${
+              statusFilter === "BLOCKED"
+                ? "bg-rose-500/35 border-rose-400 ring-2 ring-rose-500/60 shadow-lg shadow-rose-500/25 scale-[1.02]"
+                : (data?.metrics.blocked ?? 0) > 0
+                ? "bg-rose-500/20 border-rose-500/30 hover:bg-rose-500/25 hover:border-rose-500/40 hover:scale-[1.01]"
+                : "bg-black/30 border-white/10 hover:bg-white/10 hover:border-white/20 hover:scale-[1.01]"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${(data?.metrics.blocked ?? 0) > 0 ? "text-rose-300" : "text-slate-400"}`}>
+                Blocked
+              </span>
+              {statusFilter === "BLOCKED" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shadow-sm shadow-rose-400 animate-pulse" />
+              )}
+            </div>
+            <p className={`text-xl sm:text-2xl font-black mt-1 ${(data?.metrics.blocked ?? 0) > 0 ? "text-rose-400 animate-pulse" : "text-slate-300"}`}>
+              {data?.metrics.blocked ?? 0}
+            </p>
+          </button>
+
+          {/* Card 6: Overdue */}
           <button
             type="button"
             onClick={() => setStatusFilter(statusFilter === "OVERDUE" ? "ALL" : "OVERDUE")}
@@ -886,12 +919,12 @@ function ProjectTasksContent() {
             </p>
           </button>
 
-          {/* Card 6: Completed */}
+          {/* Card 7: Completed */}
           <button
             type="button"
             onClick={() => setStatusFilter(statusFilter === "COMPLETED" ? "ALL" : "COMPLETED")}
             title="Filter by Completed tasks"
-            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between col-span-2 sm:col-span-1 ${
+            className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer active:scale-95 flex flex-col justify-between col-span-2 sm:col-span-2 lg:col-span-1 ${
               statusFilter === "COMPLETED"
                 ? "bg-emerald-500/30 border-emerald-400 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20 scale-[1.02]"
                 : "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:scale-[1.01]"
@@ -916,7 +949,7 @@ function ProjectTasksContent() {
         {/* Status & Category Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-wrap">
           <div className="flex items-center gap-1">
-            {["ALL", "PENDING", "IN_PROGRESS", "WAITING_FOR_ADMIN", "OVERDUE", "BLOCKED", "COMPLETED"].map((st) => (
+            {["ALL", "PENDING", "IN_PROGRESS", "WAITING_FOR_ADMIN", "OVERDUE", "BLOCKED", "CANCELLED", "COMPLETED"].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -934,6 +967,8 @@ function ProjectTasksContent() {
                       ? "bg-emerald-600 text-white shadow-sm"
                       : st === "BLOCKED"
                       ? "bg-rose-600 text-white shadow-sm"
+                      : st === "CANCELLED"
+                      ? "bg-slate-600 text-white shadow-sm"
                       : "bg-indigo-600 text-white shadow-sm"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
                 }`}
@@ -945,6 +980,10 @@ function ProjectTasksContent() {
                     ? "⏳ Awaiting Manager Sign-Off"
                     : st === "OVERDUE"
                     ? "🚨 Overdue"
+                    : st === "BLOCKED"
+                    ? "🛑 Blocked"
+                    : st === "CANCELLED"
+                    ? "🚫 Cancelled"
                     : st.replace(/_/g, " ")}
                 </span>
                 {st === "WAITING_FOR_ADMIN" && (data?.metrics.awaitingApproval ?? 0) > 0 && (
@@ -955,6 +994,16 @@ function ProjectTasksContent() {
                 {st === "OVERDUE" && (data?.metrics.overdue ?? 0) > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200">
                     {data?.metrics.overdue}
+                  </span>
+                )}
+                {st === "BLOCKED" && (data?.metrics.blocked ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-200 text-rose-900 dark:bg-rose-900 dark:text-rose-200">
+                    {data?.metrics.blocked}
+                  </span>
+                )}
+                {st === "CANCELLED" && (data?.metrics.cancelled ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
+                    {data?.metrics.cancelled}
                   </span>
                 )}
                 {st === "PENDING" && (data?.metrics.pending ?? 0) > 0 && (
@@ -1061,6 +1110,10 @@ function ProjectTasksContent() {
                     ? "🚨 Overdue"
                     : statusFilter === "WAITING_FOR_ADMIN"
                     ? "⏳ Awaiting Sign-Off"
+                    : statusFilter === "BLOCKED"
+                    ? "🛑 Blocked"
+                    : statusFilter === "CANCELLED"
+                    ? "🚫 Cancelled"
                     : statusFilter.replace(/_/g, " ")}
                 </span>
                 <button
@@ -1188,6 +1241,10 @@ function ProjectTasksContent() {
                     ? "bg-purple-500/5 dark:bg-purple-950/20 border-purple-500/40 ring-1 ring-purple-500/20 shadow-purple-500/5"
                     : isFinished
                     ? "bg-white dark:bg-slate-900 border-emerald-500/30"
+                    : t.status === "BLOCKED"
+                    ? "bg-rose-500/5 dark:bg-rose-950/20 border-rose-500/30 ring-1 ring-rose-500/20"
+                    : t.status === "CANCELLED"
+                    ? "bg-slate-100/60 dark:bg-slate-900/40 border-slate-300 dark:border-slate-800 opacity-60"
                     : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800"
                 }`}
               >
@@ -1216,12 +1273,16 @@ function ProjectTasksContent() {
                       ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
                       : t.status === "WAITING_FOR_ADMIN"
                       ? "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-purple-500/30 animate-pulse font-bold"
+                      : t.status === "BLOCKED"
+                      ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 font-bold"
+                      : t.status === "CANCELLED"
+                      ? "bg-slate-500/15 text-slate-500 border-slate-500/30 font-bold"
                       : dl.isOverdue
                       ? "bg-red-500/15 text-red-600 border-red-500/40 animate-pulse font-black"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
                   }`}>
-                    <span>{isFinished ? "✅" : t.status === "WAITING_FOR_ADMIN" ? "⏳" : dl.isOverdue ? "🚨" : "⏳"}</span>
-                    <span>{isFinished ? "100% Completed" : t.status === "WAITING_FOR_ADMIN" ? "Needs IT Manager Sign-Off" : dl.relative}</span>
+                    <span>{isFinished ? "✅" : t.status === "WAITING_FOR_ADMIN" ? "⏳" : t.status === "BLOCKED" ? "🛑" : t.status === "CANCELLED" ? "🚫" : dl.isOverdue ? "🚨" : "⏳"}</span>
+                    <span>{isFinished ? "100% Completed" : t.status === "WAITING_FOR_ADMIN" ? "Needs IT Manager Sign-Off" : t.status === "BLOCKED" ? "Blocked / On Hold" : t.status === "CANCELLED" ? "Cancelled" : dl.relative}</span>
                   </div>
                 </div>
 
@@ -1626,7 +1687,15 @@ function ProjectTasksContent() {
                     {statusMeta[selectedTaskDetail.task.status].label}
                   </span>
                   <span className="text-[11px] font-semibold text-slate-500">
-                    Deadline: {formatDeadline(selectedTaskDetail.task.deadline).dateFormatted} ({formatDeadline(selectedTaskDetail.task.deadline).relative})
+                    Deadline: {formatDeadline(selectedTaskDetail.task.deadline).dateFormatted} ({
+                      selectedTaskDetail.task.status === "COMPLETED"
+                        ? "Completed"
+                        : selectedTaskDetail.task.status === "BLOCKED"
+                        ? "Blocked / On Hold"
+                        : selectedTaskDetail.task.status === "CANCELLED"
+                        ? "Cancelled"
+                        : formatDeadline(selectedTaskDetail.task.deadline).relative
+                    })
                   </span>
                 </div>
                 <h2 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white leading-snug break-words">
@@ -2630,6 +2699,7 @@ function ProjectTasksContent() {
                       <>
                         <option value="COMPLETED">✅ Completed (100% Admin Approved)</option>
                         <option value="WAITING_FOR_ADMIN">⏳ Awaiting Admin Review (Yes/No)</option>
+                        <option value="CANCELLED">🚫 Cancelled / Shelved</option>
                       </>
                     ) : (
                       <option value="WAITING_FOR_ADMIN">👨‍💻 Work Done (Submit for Admin Review Yes/No)</option>

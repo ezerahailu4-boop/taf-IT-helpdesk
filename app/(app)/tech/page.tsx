@@ -267,6 +267,16 @@ export default function TechDashboard() {
                           ⏳ Awaiting Admin Review (Yes/No)
                         </span>
                       )}
+                      {t.status === "BLOCKED" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          🛑 Blocked
+                        </span>
+                      )}
+                      {t.status === "CANCELLED" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/30">
+                          🚫 Cancelled
+                        </span>
+                      )}
                       <span className="font-extrabold text-xs text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
                         {t.title}
                       </span>
@@ -275,12 +285,22 @@ export default function TechDashboard() {
                       className={`text-[10px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
                         t.status === "WAITING_FOR_ADMIN"
                           ? "bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold"
+                          : t.status === "BLOCKED"
+                          ? "bg-rose-900/40 text-rose-200 border-rose-500/40 font-bold"
+                          : t.status === "CANCELLED"
+                          ? "bg-slate-800 text-slate-400 border-slate-700 font-bold"
                           : isOverdue
                           ? "bg-red-500/20 text-red-300 border-red-500/30 animate-pulse"
                           : "bg-slate-800 text-slate-300 border-slate-700"
                       }`}
                     >
-                      {t.status === "WAITING_FOR_ADMIN" ? "Admin Review (Yes/No)" : dueText}
+                      {t.status === "WAITING_FOR_ADMIN"
+                        ? "Admin Review (Yes/No)"
+                        : t.status === "BLOCKED"
+                        ? "Blocked / On Hold"
+                        : t.status === "CANCELLED"
+                        ? "Cancelled"
+                        : dueText}
                     </span>
                   </div>
 

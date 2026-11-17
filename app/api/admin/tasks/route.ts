@@ -78,7 +78,15 @@ export async function GET(req: NextRequest) {
     const awaitingApproval = tasks.filter((t: any) => t.status === "WAITING_FOR_ADMIN").length;
     const inProgress = tasks.filter((t: any) => t.status === "IN_PROGRESS").length;
     const pending = tasks.filter((t: any) => t.status === "PENDING").length;
-    const overdue = tasks.filter((t: any) => t.status !== "COMPLETED" && new Date(t.deadline).getTime() < now).length;
+    const blocked = tasks.filter((t: any) => t.status === "BLOCKED").length;
+    const cancelled = tasks.filter((t: any) => t.status === "CANCELLED").length;
+    const overdue = tasks.filter((t: any) =>
+      t.status !== "COMPLETED" &&
+      t.status !== "BLOCKED" &&
+      t.status !== "CANCELLED" &&
+      Boolean(t.deadline) &&
+      new Date(t.deadline).getTime() < now
+    ).length;
 
     // Active tasks count by technician
     const activeTasksByTech = new Map<string, number>();
@@ -214,6 +222,8 @@ export async function GET(req: NextRequest) {
         awaitingApproval,
         inProgress,
         pending,
+        blocked,
+        cancelled,
         overdue,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0
       },

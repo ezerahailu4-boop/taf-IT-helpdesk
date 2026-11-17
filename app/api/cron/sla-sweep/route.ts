@@ -122,7 +122,7 @@ async function runSlaSweep(req: NextRequest) {
   const { data: rawTasks } = await db
     .from("project_tasks")
     .select("*")
-    .not("status", "in", '("COMPLETED","CANCELLED")')
+    .not("status", "in", '("COMPLETED","CANCELLED","BLOCKED")')
     .not("deadline", "is", null);
 
   let taskWarnings = 0;
@@ -131,7 +131,7 @@ async function runSlaSweep(req: NextRequest) {
   const tasks = (rawTasks ?? []) as DbProjectTask[];
 
   for (const task of tasks) {
-    if (!task.assigned_to_id || !task.deadline || task.status === "WAITING_FOR_ADMIN") continue;
+    if (!task.assigned_to_id || !task.deadline || task.status === "WAITING_FOR_ADMIN" || task.status === "BLOCKED" || task.status === "CANCELLED") continue;
 
     const dueMs = new Date(task.deadline).getTime();
     if (isNaN(dueMs)) continue;
