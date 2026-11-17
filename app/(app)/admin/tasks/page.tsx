@@ -1971,9 +1971,17 @@ function ProjectTasksContent() {
                       className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 hover:bg-purple-100 border border-purple-200 dark:border-purple-800 transition-all flex items-center gap-1 active:scale-95 shadow-xs"
                       title="Set progress slider to match completed sub-tasks"
                     >
-                      <span>⚡ Sync to Progress (${subtaskCompletionPercent}%)</span>
+                      <span>⚡ Sync ({subtaskCompletionPercent}%)</span>
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setShowTaskDetailExportModal(true)}
+                    title="Export or print this task's sub-tasks, deliverables, and reports"
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 active:scale-95 shadow-xs"
+                  >
+                    <span>📥 Export</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowAddSubtask((prev) => !prev)}
@@ -2801,9 +2809,43 @@ function ProjectTasksContent() {
                   ]
                 ]
           }
+          detailedOption={{
+            label: "Include Daily Sub-Tasks & Field Checklist",
+            description: "Expands export to include all daily sub-tasks, assigned technicians, target dates, and completion timestamps.",
+            headers: [
+              "Task Title",
+              "Entry Type",
+              "Action Item / Title",
+              "Assigned / Lead",
+              "Target Date / Timestamp",
+              "Status / Milestone",
+              "Notes / Deliverables"
+            ],
+            rows: [
+              ...subtasks.map((st, i) => [
+                selectedTaskDetail.task.title,
+                `Sub-Task #${i + 1}`,
+                st.title,
+                st.assigned_to ? `${st.assigned_to.first_name || ""} ${st.assigned_to.last_name || ""}`.trim() : "Unassigned",
+                st.due_date,
+                st.status === "COMPLETED" ? `Completed ${st.completed_at ? new Date(st.completed_at).toLocaleTimeString() : ""}` : "Pending",
+                st.description || "None"
+              ]),
+              ...selectedTaskDetail.reports.map((rep, idx) => [
+                selectedTaskDetail.task.title,
+                `Work Log #${selectedTaskDetail.reports.length - idx}`,
+                rep.report_text || "Progress update",
+                rep.technician ? `${rep.technician.first_name || ""} ${rep.technician.last_name || ""}`.trim() : "Technician",
+                new Date(rep.created_at).toLocaleString(),
+                `${rep.progress}% (${rep.status})`,
+                rep.attachments && rep.attachments.length > 0 ? rep.attachments.map((a: any) => a.name).join(", ") : "None"
+              ])
+            ]
+          }}
           summaryCards={[
             { label: "Current Progress", value: `${selectedTaskDetail.task.progress}%`, icon: "📈", accent: "#6366F1" },
             { label: "Status", value: selectedTaskDetail.task.status, icon: "🎯" },
+            { label: "Daily Sub-Tasks", value: `${completedSubtasksCount}/${subtasks.length}`, icon: "📋", accent: "#10B981" },
             { label: "Work Logs", value: selectedTaskDetail.reports.length, icon: "📝" },
             { label: "Priority", value: selectedTaskDetail.task.priority, icon: "🚨" }
           ]}
