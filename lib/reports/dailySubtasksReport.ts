@@ -11,6 +11,25 @@ export function getEatDateString(date: Date = new Date()): string {
   return eat.toISOString().slice(0, 10);
 }
 
+/**
+ * Normalizes Postgres DATE / ISO timestamp values (e.g. "2026-11-17T21:00:00.000Z" or Date objects)
+ * into clean "YYYY-MM-DD" calendar dates in East Africa Time (UTC+3).
+ */
+export function normalizeDueDateEat(raw?: string | Date | null): string {
+  if (!raw) return "";
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return getEatDateString(parsed);
+    return trimmed.slice(0, 10);
+  }
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return getEatDateString(raw);
+  }
+  return "";
+}
+
 export function formatEatDateTime(date: Date = new Date()): string {
   const eat = new Date(date.getTime() + EAT_OFFSET_MS);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -52,15 +71,42 @@ function daysBetweenDates(earlierYmd: string, laterYmd: string): number {
   return Math.max(0, Math.round((b - a) / (24 * 60 * 60 * 1000)));
 }
 
+const ETHIOPIC_CONSONANTS: Record<number, string> = {
+  0x1200: "h", 0x1208: "l", 0x1210: "h", 0x1218: "m", 0x1220: "s", 0x1228: "r",
+  0x1230: "s", 0x1238: "sh", 0x1240: "q", 0x1260: "b", 0x1268: "v", 0x1270: "t",
+  0x1278: "ch", 0x1280: "h", 0x1290: "n", 0x1298: "ny", 0x12a0: "", 0x12a8: "k",
+  0x12b8: "h", 0x12c8: "w", 0x12d0: "", 0x12d8: "z", 0x12e0: "zh", 0x12e8: "y",
+  0x12f0: "d", 0x1300: "j", 0x1308: "g", 0x1320: "t", 0x1328: "ch", 0x1330: "p",
+  0x1338: "ts", 0x1340: "ts", 0x1348: "f", 0x1350: "p"
+};
+const ETHIOPIC_VOWELS = ["e", "u", "i", "a", "e", "", "o", "wa"];
+
+function transliterateEthiopic(input: string): string {
+  // Known brand/project names first for natural capitalization
+  let out = input.replace(/ነዳጅ\s*አለ/g, "Nedaj Ale");
+  out = out.replace(/[\u1200-\u1357]/g, (ch) => {
+    const code = ch.charCodeAt(0);
+    const base = code - (code % 8);
+    const vowelIdx = code % 8;
+    const cons = ETHIOPIC_CONSONANTS[base];
+    if (cons === undefined) return "";
+    // Special case: አ (0x12a0) and ዐ (0x12d0) base form sounds like "a"
+    if ((base === 0x12a0 || base === 0x12d0) && vowelIdx === 0) return "a";
+    return cons + (ETHIOPIC_VOWELS[vowelIdx] ?? "");
+  });
+  return out;
+}
+
 function cleanPdfText(value?: string | null): string {
   if (!value) return "";
-  return String(value)
+  return transliterateEthiopic(String(value))
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
     .replace(/[\u{2600}-\u{27BF}]/gu, "")
     .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
     .replace(/\u2013|\u2014/g, "-")
     .replace(/\u2018|\u2019/g, "'")
     .replace(/\u201C|\u201D/g, '"')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -241,18 +287,19 @@ export async function getDailySubtasksReportData(
     const completedBy = s.completed_by_id
       ? usersMap.get(s.completed_by_id) ?? assignee
       : assignee;
+    const dueDateYmd = normalizeDueDateEat(s.due_date as unknown as string | Date | null);
 
     if (s.status === "COMPLETED") {
       const completedDateEat = s.completed_at
         ? getEatDateString(new Date(s.completed_at))
-        : s.due_date;
+        : dueDateYmd;
 
       if (completedDateEat === reportDate) {
         completedItems.push({
           id: s.id,
           title: s.title,
           description: s.description ?? null,
-          dueDate: s.due_date,
+          dueDate: dueDateYmd || reportDate,
           status: "COMPLETED",
           completedAt: s.completed_at ?? null,
           completedTimeLabel: formatEatTimeOnly(s.completed_at),
@@ -270,14 +317,17 @@ export async function getDailySubtasksReportData(
         });
       }
     } else if (s.status === "PENDING") {
-      const parentInactive = task.status === "COMPLETED" || task.status === "CANCELLED";
-      if (!parentInactive && s.due_date && s.due_date <= reportDate) {
-        const lagDays = daysBetweenDates(s.due_date, reportDate);
+      const parentInactive =
+        task.status === "COMPLETED" ||
+        task.status === "CANCELLED" ||
+        task.status === "BLOCKED";
+      if (!parentInactive && dueDateYmd && dueDateYmd <= reportDate) {
+        const lagDays = daysBetweenDates(dueDateYmd, reportDate);
         rolloverItems.push({
           id: s.id,
           title: s.title,
           description: s.description ?? null,
-          dueDate: s.due_date,
+          dueDate: dueDateYmd,
           status: "PENDING",
           completedAt: null,
           completedTimeLabel: "-",
