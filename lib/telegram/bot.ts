@@ -6,7 +6,7 @@ if (!BOT_TOKEN && process.env.NODE_ENV !== "test") {
   console.warn("[telegram] TELEGRAM_BOT_TOKEN is not set");
 }
 
-type InlineButton = { text: string; url?: string; callback_data?: string };
+type InlineButton = { text: string; url?: string; callback_data?: string; web_app?: { url: string } };
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const res = await fetch(`${API}/${method}`, {
@@ -52,6 +52,45 @@ export async function sendMessage(
   return callTelegram("sendMessage", payload);
 }
 
+/**
+ * Sends a file/document (such as a generated PDF report) directly to a Telegram chat.
+ */
+export async function sendDocument(
+  chatId: number | string,
+  fileBytes: Uint8Array | Buffer,
+  filename: string,
+  opts: {
+    caption?: string;
+    parseMode?: "HTML" | "MarkdownV2";
+    buttons?: InlineButton[][];
+    mimeType?: string;
+  } = {}
+) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  const arrayCopy = new Uint8Array(fileBytes);
+  const blob = new Blob([arrayCopy], { type: opts.mimeType ?? "application/pdf" });
+  form.append("document", blob, filename);
+
+  if (opts.caption) {
+    form.append("caption", opts.caption);
+    form.append("parse_mode", opts.parseMode ?? "HTML");
+  }
+  if (opts.buttons) {
+    form.append("reply_markup", JSON.stringify({ inline_keyboard: opts.buttons }));
+  }
+
+  const res = await fetch(`${API}/sendDocument`, {
+    method: "POST",
+    body: form
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    console.error(`[telegram] sendDocument failed for chat ${chatId}:`, data);
+  }
+  return data;
+}
+
 export async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   return callTelegram("answerCallbackQuery", { callback_query_id: callbackQueryId, text, show_alert: false });
 }
@@ -63,6 +102,7 @@ export async function setMyCommands() {
       { command: "help", description: "Get help" },
       { command: "mytickets", description: "View my tickets" },
       { command: "newticket", description: "Report a problem" },
+      { command: "dailyreport", description: "Daily Sub-Tasks PDF (Admins)" },
       { command: "support", description: "Contact IT support" }
     ]
   });

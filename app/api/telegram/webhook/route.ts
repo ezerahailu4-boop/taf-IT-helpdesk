@@ -8,6 +8,7 @@ import {
   notifyProjectTaskApproved100,
   notifyProjectTaskRevisionsRequested
 } from "@/lib/notifications";
+import { sendDailySubtasksPdfReport } from "@/lib/reports/dailySubtasksReport";
 import type { DbProjectTask } from "@/types/db";
 
 /**
@@ -212,7 +213,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   const isExplicitNameCmd = lowerText.startsWith("/name") || lowerText.startsWith("/register");
 
   const slashWords = text.startsWith("/") ? text.slice(1).split(/\s+/).filter(Boolean) : [];
-  const knownSystemCmds = ["start", "help", "mytickets", "newticket", "support", "tech", "admin"];
+  const knownSystemCmds = ["start", "help", "mytickets", "newticket", "support", "tech", "admin", "dailyreport"];
   const isCustomSlashName = text.startsWith("/") && slashWords.length >= 2 && !knownSystemCmds.includes(slashWords[0].toLowerCase());
 
   const isFreeTextName = !text.startsWith("/") && !isProperlyRegistered;
@@ -322,6 +323,36 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
 
   if (text.startsWith("/newticket")) {
     await sendMessage(chatId, "Let's get you help — tell us what's going on:", { buttons: [[miniAppButton("🛠 Report a Problem", "/create")]] });
+    return;
+  }
+
+  if (text.toLowerCase().startsWith("/dailyreport")) {
+    if (user?.role !== "ADMIN") {
+      await sendMessage(
+        chatId,
+        `🔒 <b>Admin Only</b>\nThe daily sub-tasks PDF report is restricted to IT Administrators.`,
+        { parseMode: "HTML" }
+      );
+      return;
+    }
+
+    const argDate = text.replace(/^\/dailyreport(?:@\S+)?\s*/i, "").trim();
+    const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(argDate) ? argDate : undefined;
+
+    await sendMessage(chatId, `⏳ Generating your daily sub-tasks PDF report...`);
+    try {
+      const res = await sendDailySubtasksPdfReport(db, {
+        targetDate,
+        singleChatId: chatId,
+        triggeredBy: fullName
+      });
+      if (!res.ok) {
+        await sendMessage(chatId, `⚠️ Could not deliver PDF right now. Please try again from the Admin Dashboard.`);
+      }
+    } catch (err) {
+      console.error("[telegram] /dailyreport error:", err);
+      await sendMessage(chatId, `⚠️ Failed to generate daily PDF report. Please try again.`);
+    }
     return;
   }
 

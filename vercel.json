@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/sla-sweep", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/sla-sweep", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/daily-subtasks-report", "schedule": "0 14 * * *" }
   ]
 }

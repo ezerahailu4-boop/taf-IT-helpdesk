@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { api, uploadTaskAttachment } from "@/lib/apiClient";
 import { useMe } from "@/lib/useMe";
 import { ExportModal } from "@/components/ExportModal";
+import { DailySubtasksReportModal } from "@/components/DailySubtasksReportModal";
 import { downloadCsv, buildCsvString } from "@/lib/exportUtils";
 import type { DbProjectTask, DbProjectTaskReport, TaskReportAttachment, DbProjectSubtask, ProjectTaskStatus, ProjectTaskPriority, ProjectTaskCategory } from "@/types/db";
 
@@ -159,6 +160,7 @@ function ProjectTasksContent() {
   // Export Modal States
   const [showExportModal, setShowExportModal] = useState(false);
   const [showTaskDetailExportModal, setShowTaskDetailExportModal] = useState(false);
+  const [showDailyPdfModal, setShowDailyPdfModal] = useState(false);
 
   // Live Sync & SLA Sweep States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -727,6 +729,17 @@ function ProjectTasksContent() {
               <span>➕</span>
               <span>New Project Task</span>
             </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowDailyPdfModal(true)}
+                title="Preview, download, or send Daily Completed Sub-Tasks PDF (plus Roll for the Next Day) to Admin Telegrams"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold bg-gradient-to-r from-emerald-500/25 to-cyan-500/25 hover:from-emerald-500/35 hover:to-cyan-500/35 text-emerald-200 border border-emerald-400/40 backdrop-blur-md transition-all active:scale-95 shadow-sm"
+              >
+                <span>📄</span>
+                <span>Daily Sub-Tasks PDF</span>
+              </button>
+            )}
 
             {isAdmin && (
               <button
@@ -2921,6 +2934,12 @@ function ProjectTasksContent() {
           ]}
         />
       )}
+
+      {/* Daily Completed Sub-Tasks PDF & Telegram Dispatch Modal */}
+      <DailySubtasksReportModal
+        isOpen={showDailyPdfModal}
+        onClose={() => setShowDailyPdfModal(false)}
+      />
     </div>
   );
 }
