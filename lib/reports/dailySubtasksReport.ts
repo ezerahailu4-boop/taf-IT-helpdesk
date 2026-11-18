@@ -211,6 +211,7 @@ export interface DailySubtaskReportItem {
   taskPriority: string;
   taskStatus: string;
   taskProgress: number;
+  progressWeight: number;
   assigneeName: string;
   assigneeUsername: string | null;
   completedByName: string;
@@ -310,6 +311,7 @@ export async function getDailySubtasksReportData(
           taskPriority: task.priority,
           taskStatus: task.status,
           taskProgress: Number(task.progress ?? 0),
+          progressWeight: Number(s.progress_weight ?? 0),
           assigneeName: formatUserName(assignee),
           assigneeUsername: assignee?.telegram_username ?? null,
           completedByName: formatUserName(completedBy),
@@ -338,6 +340,7 @@ export async function getDailySubtasksReportData(
           taskPriority: task.priority,
           taskStatus: task.status,
           taskProgress: Number(task.progress ?? 0),
+          progressWeight: Number(s.progress_weight ?? 0),
           assigneeName: formatUserName(assignee),
           assigneeUsername: assignee?.telegram_username ?? null,
           completedByName: formatUserName(assignee),
@@ -971,14 +974,22 @@ export function buildDailySubtasksPdfBuffer(data: DailySubtasksReportData): Buff
     }
   };
 
-  // Custom cell renderer: Modern Progress Bar
-  const drawProgressCell = (cell: any, progressVal: number, fillRgb: [number, number, number]) => {
+  // Custom cell renderer: Modern Progress Bar + Sub-Task Weight Contribution
+  const drawProgressCell = (
+    cell: any,
+    progressVal: number,
+    fillRgb: [number, number, number],
+    weightLabel?: string,
+    weightColor?: [number, number, number]
+  ) => {
     const pct = Math.max(0, Math.min(100, Number(progressVal) || 0));
     const padX = 2.6;
     const trackW = cell.width - padX * 2 - 9.2;
     const trackH = 2.3;
     const trackX = cell.x + padX;
-    const trackY = cell.y + cell.height / 2 - trackH / 2;
+    const hasSubLabel = Boolean(weightLabel);
+    const barCenterY = hasSubLabel ? cell.y + cell.height / 2 - 1.6 : cell.y + cell.height / 2;
+    const trackY = barCenterY - trackH / 2;
 
     doc.setFillColor(226, 232, 240);
     doc.roundedRect(trackX, trackY, trackW, trackH, 1.1, 1.1, "F");
@@ -991,9 +1002,17 @@ export function buildDailySubtasksPdfBuffer(data: DailySubtasksReportData): Buff
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.4);
     doc.setTextColor(30, 41, 59);
-    doc.text(`${pct}%`, cell.x + cell.width - 2.4, cell.y + cell.height / 2 + 1.0, {
+    doc.text(`${pct}%`, cell.x + cell.width - 2.4, barCenterY + 1.0, {
       align: "right"
     });
+
+    if (hasSubLabel && weightLabel) {
+      const c = weightColor ?? [100, 116, 139];
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.1);
+      doc.setTextColor(c[0], c[1], c[2]);
+      doc.text(weightLabel, trackX, barCenterY + 4.3);
+    }
   };
 
   // =========================================================================
@@ -1106,7 +1125,13 @@ export function buildDailySubtasksPdfBuffer(data: DailySubtasksReportData): Buff
         } else if (hookData.column.index === 3) {
           drawTechnicianCell(hookData.cell, item.completedByName, item.completedByUsername);
         } else if (hookData.column.index === 6) {
-          drawProgressCell(hookData.cell, item.taskProgress, [16, 185, 129]);
+          drawProgressCell(
+            hookData.cell,
+            item.taskProgress,
+            [16, 185, 129],
+            item.progressWeight > 0 ? `+${item.progressWeight}% added` : undefined,
+            [5, 150, 105]
+          );
         }
       }
     });
@@ -1257,7 +1282,13 @@ export function buildDailySubtasksPdfBuffer(data: DailySubtasksReportData): Buff
           doc.setTextColor(isCarried ? 185 : 146, isCarried ? 28 : 64, isCarried ? 28 : 14);
           doc.text(item.rolloverLabel, pillX + pillW / 2 + 1.2, pillY + 3.8, { align: "center" });
         } else if (hookData.column.index === 6) {
-          drawProgressCell(hookData.cell, item.taskProgress, [245, 158, 11]);
+          drawProgressCell(
+            hookData.cell,
+            item.taskProgress,
+            [245, 158, 11],
+            item.progressWeight > 0 ? `Weight: +${item.progressWeight}%` : undefined,
+            [180, 83, 9]
+          );
         }
       }
     });

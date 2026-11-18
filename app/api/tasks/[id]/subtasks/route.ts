@@ -13,7 +13,8 @@ const createSubtaskSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(300),
   description: z.string().trim().max(2000).optional().nullable(),
   assignedToId: z.string().uuid().optional().nullable(),
-  dueDate: z.string().optional() // YYYY-MM-DD
+  dueDate: z.string().optional(), // YYYY-MM-DD
+  progressWeight: z.coerce.number().int().min(0).max(100).optional()
 });
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -92,6 +93,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const todayStr = new Date().toISOString().split("T")[0];
     const finalDueDate = body.dueDate && body.dueDate.trim().length > 0 ? body.dueDate.trim() : todayStr;
 
+    const progressWeight = body.progressWeight ?? 10;
+
     const { data: subtask, error: insertErr } = await db
       .from("project_subtasks")
       .insert({
@@ -100,6 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         description: body.description || null,
         assigned_to_id: targetAssigneeId || null,
         due_date: finalDueDate,
+        progress_weight: progressWeight,
         status: "PENDING",
         created_by_id: user.id
       })

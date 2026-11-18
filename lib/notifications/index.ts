@@ -654,12 +654,15 @@ export async function notifyProjectSubtaskCompleted(
   if (!admins || admins.length === 0) return;
 
   const techName = `${completedByUser.first_name ?? "Technician"} ${completedByUser.last_name ?? ""}`.trim();
+  const weight = Number(subtask.progress_weight ?? 0);
+  const goalPct = Number(task.progress ?? 0);
   const text =
     `✅ <b>DAILY SUB-TASK COMPLETED</b>\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
     `📋 <b>Project Task:</b> <b>${task.title}</b>\n` +
     `🎯 <b>Sub-Task:</b> <b>${subtask.title}</b>\n` +
     `👨‍💻 <b>Completed By:</b> ${techName} (@${completedByUser.telegram_username || "tech"})\n` +
+    (weight > 0 ? `📈 <b>Goal Progress:</b> <b>+${weight}%</b> added → Task now at <b>${goalPct}%</b>\n` : `📈 <b>Goal Progress:</b> <b>${goalPct}%</b>\n`) +
     `📅 <b>Date:</b> <code>${subtask.due_date}</code>`;
 
   for (const admin of admins) {

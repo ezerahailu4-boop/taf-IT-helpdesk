@@ -14,7 +14,8 @@ const patchSubtaskSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   description: z.string().trim().max(2000).optional().nullable(),
   assignedToId: z.string().uuid().optional().nullable(),
-  dueDate: z.string().optional()
+  dueDate: z.string().optional(),
+  progressWeight: z.coerce.number().int().min(0).max(100).optional()
 });
 
 export async function PATCH(
@@ -51,16 +52,19 @@ export async function PATCH(
       updated_at: now
     };
 
-    let newlyCompleted = false;
+    const wasCompleted = subtask.status === "COMPLETED";
+    const nextStatus = body.status ?? subtask.status;
+    const isNowCompleted = nextStatus === "COMPLETED";
+    const newlyCompleted = !wasCompleted && isNowCompleted;
+
+    const oldWeight = Number(subtask.progress_weight ?? 10);
+    const newWeight = body.progressWeight !== undefined ? body.progressWeight : oldWeight;
 
     if (body.status !== undefined) {
       updates.status = body.status;
       if (body.status === "COMPLETED") {
         updates.completed_at = now;
         updates.completed_by_id = user.id;
-        if (subtask.status !== "COMPLETED") {
-          newlyCompleted = true;
-        }
       } else {
         updates.completed_at = null;
         updates.completed_by_id = null;
@@ -71,6 +75,7 @@ export async function PATCH(
     if (body.description !== undefined) updates.description = body.description;
     if (body.assignedToId !== undefined) updates.assigned_to_id = body.assignedToId;
     if (body.dueDate !== undefined) updates.due_date = body.dueDate;
+    if (body.progressWeight !== undefined) updates.progress_weight = newWeight;
 
     const { data: updatedSubtask, error: updateErr } = await db
       .from("project_subtasks")
@@ -81,6 +86,47 @@ export async function PATCH(
 
     if (updateErr || !updatedSubtask) {
       throw new Error(updateErr?.message || "Failed to update sub-task");
+    }
+
+    // 1b. Apply weight delta to parent project_tasks.progress automatically
+    let updatedTask = task;
+    if (task) {
+      let progressDelta = 0;
+      if (!wasCompleted && isNowCompleted) {
+        progressDelta = newWeight;
+      } else if (wasCompleted && !isNowCompleted) {
+        progressDelta = -oldWeight;
+      } else if (wasCompleted && isNowCompleted && body.progressWeight !== undefined) {
+        progressDelta = newWeight - oldWeight;
+      }
+
+      if (progressDelta !== 0) {
+        const currentProgress = Number(task.progress ?? 0);
+        const maxCap = user.role === "ADMIN" ? 100 : 90;
+        const nextProgress =
+          progressDelta > 0
+            ? Math.max(currentProgress, Math.min(maxCap, currentProgress + progressDelta))
+            : Math.max(0, currentProgress + progressDelta);
+
+        const taskUpdates: Record<string, any> = {
+          progress: nextProgress,
+          updated_at: now
+        };
+        if (task.status === "PENDING" && nextProgress > 0) {
+          taskUpdates.status = "IN_PROGRESS";
+        }
+
+        const { data: savedTask } = await db
+          .from("project_tasks")
+          .update(taskUpdates)
+          .eq("id", params.id)
+          .select("*")
+          .single();
+
+        if (savedTask) {
+          updatedTask = savedTask;
+        }
+      }
     }
 
     // 2. Fetch all subtasks for stats
@@ -94,8 +140,8 @@ export async function PATCH(
     const completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
     // Send completion notification to admins if completed by technician
-    if (newlyCompleted && task) {
-      await notifyProjectSubtaskCompleted(db, task as DbProjectTask, updatedSubtask as DbProjectSubtask, user);
+    if (newlyCompleted && updatedTask) {
+      await notifyProjectSubtaskCompleted(db, updatedTask as DbProjectTask, updatedSubtask as DbProjectSubtask, user);
     }
 
     // Enrich assignee and completed_by
@@ -114,6 +160,7 @@ export async function PATCH(
 
     return NextResponse.json({
       subtask: enriched,
+      task: updatedTask,
       stats: {
         total: totalSubtasks,
         completed: completedSubtasks,

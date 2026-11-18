@@ -117,6 +117,7 @@ export interface DbProjectSubtask {
   assigned_to_id: string | null;
   due_date: string;
   status: SubtaskStatus;
+  progress_weight?: number;
   completed_at?: string | null;
   completed_by_id?: string | null;
   created_by_id?: string | null;

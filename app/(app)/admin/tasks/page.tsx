@@ -142,8 +142,13 @@ function ProjectTasksContent() {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newSubtaskDueDate, setNewSubtaskDueDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState("");
+  const [newSubtaskWeight, setNewSubtaskWeight] = useState<number>(10);
   const [savingSubtask, setSavingSubtask] = useState(false);
   const [togglingSubtaskId, setTogglingSubtaskId] = useState<string | null>(null);
+  const [completingSubtaskId, setCompletingSubtaskId] = useState<string | null>(null);
+  const [completingWeight, setCompletingWeight] = useState<number>(10);
+  const [editingWeightSubtaskId, setEditingWeightSubtaskId] = useState<string | null>(null);
+  const [editingWeightValue, setEditingWeightValue] = useState<number>(10);
   const [subtaskInputError, setSubtaskInputError] = useState<string | null>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
 
@@ -430,6 +435,44 @@ function ProjectTasksContent() {
     }
   };
 
+  const applyParentTaskUpdate = (updatedTask?: Partial<DbProjectTask> | null) => {
+    if (!updatedTask || !selectedTaskDetail) return;
+    setSelectedTaskDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            task: {
+              ...prev.task,
+              progress: updatedTask.progress ?? prev.task.progress,
+              status: (updatedTask.status as ProjectTaskStatus) ?? prev.task.status
+            }
+          }
+        : prev
+    );
+    if (typeof updatedTask.progress === "number") {
+      setReportProgress(updatedTask.progress);
+    }
+    if (updatedTask.status) {
+      setReportStatus(updatedTask.status as ProjectTaskStatus);
+    }
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            tasks: prev.tasks.map((t) =>
+              t.id === selectedTaskDetail.task.id
+                ? {
+                    ...t,
+                    progress: updatedTask.progress ?? t.progress,
+                    status: (updatedTask.status as ProjectTaskStatus) ?? t.status
+                  }
+                : t
+            )
+          }
+        : prev
+    );
+  };
+
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTaskDetail || savingSubtask) return;
@@ -446,11 +489,13 @@ function ProjectTasksContent() {
         body: JSON.stringify({
           title: newSubtaskTitle.trim(),
           dueDate: newSubtaskDueDate,
-          assignedToId: newSubtaskAssigneeId || undefined
+          assignedToId: newSubtaskAssigneeId || undefined,
+          progressWeight: Math.max(0, Math.min(100, Number(newSubtaskWeight) || 0))
         })
       });
       setSubtasks((prev) => [...prev, res.subtask]);
       setNewSubtaskTitle("");
+      setNewSubtaskWeight(10);
       setShowAddSubtask(false);
     } catch (err: any) {
       alert(err.message || "Failed to create daily sub-task");
@@ -459,21 +504,77 @@ function ProjectTasksContent() {
     }
   };
 
-  const handleToggleSubtask = async (subtaskId: string, currentStatus: string) => {
+  const handleToggleSubtask = async (subtaskId: string, currentStatus: string, currentWeight?: number) => {
     if (!selectedTaskDetail || togglingSubtaskId) return;
-    const newStatus = currentStatus === "COMPLETED" ? "PENDING" : "COMPLETED";
+
+    // When checking off a PENDING sub-task, prompt inline so the technician can confirm or set +% goal progress!
+    if (currentStatus !== "COMPLETED") {
+      setEditingWeightSubtaskId(null);
+      setCompletingSubtaskId(subtaskId);
+      setCompletingWeight(currentWeight !== undefined ? currentWeight : 10);
+      return;
+    }
+
+    // Unchecking a COMPLETED sub-task reverts it to PENDING and subtracts its weight from parent goal
     setTogglingSubtaskId(subtaskId);
     try {
-      const res = await api<{ subtask: SubtaskWithDetails; stats: { total: number; completed: number; percentage: number } }>(
-        `/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ status: newStatus })
-        }
-      );
+      const res = await api<{
+        subtask: SubtaskWithDetails;
+        task?: DbProjectTask;
+        stats: { total: number; completed: number; percentage: number };
+      }>(`/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "PENDING" })
+      });
       setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? res.subtask : s)));
+      applyParentTaskUpdate(res.task);
     } catch (err: any) {
       alert(err.message || "Failed to update sub-task status");
+    } finally {
+      setTogglingSubtaskId(null);
+    }
+  };
+
+  const handleConfirmCompleteSubtask = async (subtaskId: string) => {
+    if (!selectedTaskDetail || togglingSubtaskId) return;
+    const weight = Math.max(0, Math.min(100, Number(completingWeight) || 0));
+    setTogglingSubtaskId(subtaskId);
+    try {
+      const res = await api<{
+        subtask: SubtaskWithDetails;
+        task?: DbProjectTask;
+        stats: { total: number; completed: number; percentage: number };
+      }>(`/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "COMPLETED", progressWeight: weight })
+      });
+      setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? res.subtask : s)));
+      applyParentTaskUpdate(res.task);
+      setCompletingSubtaskId(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to complete sub-task");
+    } finally {
+      setTogglingSubtaskId(null);
+    }
+  };
+
+  const handleUpdateSubtaskWeight = async (subtaskId: string) => {
+    if (!selectedTaskDetail || togglingSubtaskId) return;
+    const weight = Math.max(0, Math.min(100, Number(editingWeightValue) || 0));
+    setTogglingSubtaskId(subtaskId);
+    try {
+      const res = await api<{
+        subtask: SubtaskWithDetails;
+        task?: DbProjectTask;
+      }>(`/api/tasks/${selectedTaskDetail.task.id}/subtasks/${subtaskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ progressWeight: weight })
+      });
+      setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? res.subtask : s)));
+      applyParentTaskUpdate(res.task);
+      setEditingWeightSubtaskId(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to update sub-task weight");
     } finally {
       setTogglingSubtaskId(null);
     }
@@ -2231,6 +2332,48 @@ function ProjectTasksContent() {
                     </div>
                   </div>
 
+                  {/* Goal Progress Weight (%) */}
+                  <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <label className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase">
+                        ⚖️ Goal Progress Weight (%)
+                      </label>
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        Completing adds{" "}
+                        <span className="font-black text-emerald-600 dark:text-emerald-400">+{newSubtaskWeight}%</span>{" "}
+                        ({selectedTaskDetail.task.progress}% →{" "}
+                        {Math.min(isAdmin ? 100 : 90, selectedTaskDetail.task.progress + (Number(newSubtaskWeight) || 0))}%)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[5, 10, 15, 20, 25, 30, 50].map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => setNewSubtaskWeight(w)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                            newSubtaskWeight === w
+                              ? "bg-indigo-600 text-white shadow-xs"
+                              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400"
+                          }`}
+                        >
+                          +{w}%
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={newSubtaskWeight}
+                          onChange={(e) => setNewSubtaskWeight(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                          className="w-14 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-[11px] text-center"
+                        />
+                        <span className="text-[10px] font-bold text-slate-500">%</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-end gap-2 pt-1">
                     <button
                       type="button"
@@ -2292,13 +2435,13 @@ function ProjectTasksContent() {
                           <button
                             type="button"
                             disabled={isBusy}
-                            onClick={() => handleToggleSubtask(st.id, st.status)}
+                            onClick={() => handleToggleSubtask(st.id, st.status, st.progress_weight ?? 10)}
                             className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all ${
                               isDone
                                 ? "bg-emerald-600 border-emerald-600 text-white"
                                 : "border-slate-300 dark:border-slate-600 hover:border-indigo-500 bg-white dark:bg-slate-800"
                             }`}
-                            title={isDone ? "Mark as pending" : "Mark as completed"}
+                            title={isDone ? "Mark as pending" : "Complete & add % to goal progress"}
                           >
                             {isBusy ? (
                               <span className="w-2.5 h-2.5 border border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -2333,6 +2476,29 @@ function ProjectTasksContent() {
                               >
                                 {isDone ? "✅ Completed" : isOverdue ? "⚠️ Overdue" : isToday ? "🔥 Today" : `📅 ${st.due_date}`}
                               </span>
+
+                              {/* Clickable Progress Weight Badge */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCompletingSubtaskId(null);
+                                  if (editingWeightSubtaskId === st.id) {
+                                    setEditingWeightSubtaskId(null);
+                                  } else {
+                                    setEditingWeightSubtaskId(st.id);
+                                    setEditingWeightValue(st.progress_weight ?? 10);
+                                  }
+                                }}
+                                title="Click to adjust how much % this sub-task adds to the parent goal"
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-black border transition-all ${
+                                  isDone
+                                    ? "bg-indigo-100/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300/70 dark:border-indigo-700/70 hover:bg-indigo-200 dark:hover:bg-indigo-900"
+                                    : "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60 hover:bg-purple-100"
+                                }`}
+                              >
+                                ⚖️ +{st.progress_weight ?? 10}% Goal
+                              </button>
                             </div>
 
                             {/* Assignee & completed info */}
@@ -2357,6 +2523,128 @@ function ProjectTasksContent() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Inline Completion Progress % Selector (shown when clicking checkbox to complete) */}
+                            {completingSubtaskId === st.id && !isDone && (
+                              <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/70 space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 uppercase">
+                                    📈 Increase Goal Progress By:
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                    Goal: {selectedTaskDetail.task.progress}% →{" "}
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                                      {Math.min(
+                                        isAdmin ? 100 : 90,
+                                        selectedTaskDetail.task.progress + (Number(completingWeight) || 0)
+                                      )}%
+                                    </span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {[5, 10, 15, 20, 25, 30, 50].map((w) => (
+                                    <button
+                                      key={w}
+                                      type="button"
+                                      onClick={() => setCompletingWeight(w)}
+                                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                                        completingWeight === w
+                                          ? "bg-emerald-600 text-white shadow-xs"
+                                          : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-emerald-200 dark:border-emerald-800"
+                                      }`}
+                                    >
+                                      +{w}%
+                                    </button>
+                                  ))}
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={completingWeight}
+                                    onChange={(e) =>
+                                      setCompletingWeight(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                                    }
+                                    className="w-12 px-1.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-[10px] text-center"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-500">%</span>
+                                </div>
+                                <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCompletingSubtaskId(null)}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleConfirmCompleteSubtask(st.id)}
+                                    className="px-3 py-1 rounded-lg text-[10px] font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm active:scale-95 disabled:opacity-50"
+                                  >
+                                    {isBusy ? "Saving..." : `✓ Complete (+${completingWeight}%)`}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Inline Weight Adjuster (when clicking the ⚖️ +X% Goal badge) */}
+                            {editingWeightSubtaskId === st.id && (
+                              <div className="mt-2 p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-300 dark:border-indigo-700/70 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">
+                                    ⚖️ Adjust Goal Weight (%)
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                    {isDone ? "Updates parent goal immediately" : "Applied when completed"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {[5, 10, 15, 20, 25, 30, 50].map((w) => (
+                                    <button
+                                      key={w}
+                                      type="button"
+                                      onClick={() => setEditingWeightValue(w)}
+                                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                                        editingWeightValue === w
+                                          ? "bg-indigo-600 text-white shadow-xs"
+                                          : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-indigo-200 dark:border-indigo-800"
+                                      }`}
+                                    >
+                                      +{w}%
+                                    </button>
+                                  ))}
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={editingWeightValue}
+                                    onChange={(e) =>
+                                      setEditingWeightValue(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                                    }
+                                    className="w-12 px-1.5 py-0.5 rounded-md border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold text-[10px] text-center"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-500">%</span>
+                                </div>
+                                <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingWeightSubtaskId(null)}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleUpdateSubtaskWeight(st.id)}
+                                    className="px-3 py-1 rounded-lg text-[10px] font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm active:scale-95 disabled:opacity-50"
+                                  >
+                                    {isBusy ? "Saving..." : `Save (+${editingWeightValue}%)`}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
 
