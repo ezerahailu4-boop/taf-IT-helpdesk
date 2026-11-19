@@ -1429,6 +1429,9 @@ export async function sendDailySubtasksPdfReport(
   const filename = `TAF_Daily_Subtasks_Report_${reportData.reportDate}.pdf`;
   const caption = buildDailySubtasksTelegramCaption(reportData);
   const buttons = [[miniAppButton("📋 Open Project Tasks", "/admin/tasks")]];
+  // Groups don't support web_app buttons — use a regular URL button instead
+  const appBase = process.env.NEXT_PUBLIC_APP_URL || "https://it-helpdesk-alpha-brown.vercel.app";
+  const groupButtons = [[{ text: "📋 Open Project Tasks", url: `${appBase.replace(/\/$/, "")}/admin/tasks` }]];
 
   if (opts.singleChatId) {
     const res = await sendDocument(opts.singleChatId, pdfBuffer, filename, {
@@ -1522,7 +1525,7 @@ export async function sendDailySubtasksPdfReport(
           const res = await sendDocument(groupChatId, pdfBuffer, filename, {
             caption,
             parseMode: "HTML",
-            buttons
+            buttons: groupButtons
           });
           const ok = Boolean(res?.ok);
           recipients.push({
