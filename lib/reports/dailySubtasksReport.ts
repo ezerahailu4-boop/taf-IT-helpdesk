@@ -1445,15 +1445,17 @@ export async function sendDailySubtasksPdfReport(
     };
   }
 
-  const { data: admins } = await db
-    .from("users")
-    .select("*")
-    .eq("role", "ADMIN")
-    .eq("is_active", true);
+  // Fetch admins and group chat ID in parallel upfront
+  const [{ data: admins }, { data: groupSetting }] = await Promise.all([
+    db.from("users").select("*").eq("role", "ADMIN").eq("is_active", true),
+    db.from("system_settings").select("value").eq("key", "it_group_chat_id").maybeSingle()
+  ]);
 
   const validAdmins = ((admins ?? []) as DbUser[]).filter(
     (a) => a.telegram_id && Number(a.telegram_id) > 100000 && Number(a.telegram_id) !== 2025001
   );
+
+  const groupChatId = groupSetting?.value;
 
   const recipients: Array<{
     userId: string;
@@ -1463,82 +1465,90 @@ export async function sendDailySubtasksPdfReport(
     error?: string;
   }> = [];
 
-  for (const admin of validAdmins) {
-    try {
-      const res = await sendDocument(admin.telegram_id, pdfBuffer, filename, {
-        caption,
-        parseMode: "HTML",
-        buttons
-      });
-      const ok = Boolean(res?.ok);
-      recipients.push({
-        userId: admin.id,
-        name: formatUserName(admin),
-        telegramId: String(admin.telegram_id),
-        ok,
-        error: ok ? undefined : res?.description || "Telegram delivery failed"
-      });
+  // Build all send promises to dispatch concurrently (admins + group)
+  const sendPromises: Promise<void>[] = [];
 
-      if (ok) {
+  // --- Admin sends ---
+  for (const admin of validAdmins) {
+    sendPromises.push(
+      (async () => {
         try {
-          await db.from("notifications").insert({
-            user_id: admin.id,
-            ticket_id: null,
-            type: "DAILY_SUBTASKS_PDF",
-            title: `Daily Sub-Tasks PDF (${reportData.reportDate})`,
-            body: `Completed: ${reportData.metrics.totalCompleted}, Roll for Next Day: ${reportData.metrics.totalRollover}`,
-            sent_at: new Date().toISOString()
+          const res = await sendDocument(admin.telegram_id, pdfBuffer, filename, {
+            caption,
+            parseMode: "HTML",
+            buttons
           });
-        } catch {
-          // Non-blocking audit log
+          const ok = Boolean(res?.ok);
+          recipients.push({
+            userId: admin.id,
+            name: formatUserName(admin),
+            telegramId: String(admin.telegram_id),
+            ok,
+            error: ok ? undefined : res?.description || "Telegram delivery failed"
+          });
+
+          if (ok) {
+            try {
+              await db.from("notifications").insert({
+                user_id: admin.id,
+                ticket_id: null,
+                type: "DAILY_SUBTASKS_PDF",
+                title: `Daily Sub-Tasks PDF (${reportData.reportDate})`,
+                body: `Completed: ${reportData.metrics.totalCompleted}, Roll for Next Day: ${reportData.metrics.totalRollover}`,
+                sent_at: new Date().toISOString()
+              });
+            } catch {
+              // Non-blocking audit log
+            }
+          }
+        } catch (err: any) {
+          recipients.push({
+            userId: admin.id,
+            name: formatUserName(admin),
+            telegramId: String(admin.telegram_id),
+            ok: false,
+            error: err?.message || "Unexpected send error"
+          });
         }
-      }
-    } catch (err: any) {
-      recipients.push({
-        userId: admin.id,
-        name: formatUserName(admin),
-        telegramId: String(admin.telegram_id),
-        ok: false,
-        error: err?.message || "Unexpected send error"
-      });
-    }
+      })()
+    );
   }
+
+  // --- IT Followup Group send (runs concurrently with admin sends) ---
+  if (groupChatId) {
+    sendPromises.push(
+      (async () => {
+        try {
+          const res = await sendDocument(groupChatId, pdfBuffer, filename, {
+            caption,
+            parseMode: "HTML",
+            buttons
+          });
+          const ok = Boolean(res?.ok);
+          recipients.push({
+            userId: "group",
+            name: "IT Followup Group",
+            telegramId: String(groupChatId),
+            ok,
+            error: ok ? undefined : res?.description || "Telegram group delivery failed"
+          });
+        } catch (err: any) {
+          recipients.push({
+            userId: "group",
+            name: "IT Followup Group",
+            telegramId: String(groupChatId),
+            ok: false,
+            error: err?.message || "Unexpected group send error"
+          });
+        }
+      })()
+    );
+  }
+
+  // Fire all sends concurrently
+  await Promise.all(sendPromises);
 
   const adminsNotified = recipients.filter((r) => r.ok && r.userId !== "group").length;
-
-  // Also dispatch to IT Support / Followup Group chat if configured in system_settings
-  const { data: groupSetting } = await db
-    .from("system_settings")
-    .select("value")
-    .eq("key", "it_group_chat_id")
-    .maybeSingle();
-
-  const groupChatId = groupSetting?.value;
-  if (groupChatId) {
-    try {
-      const res = await sendDocument(groupChatId, pdfBuffer, filename, {
-        caption,
-        parseMode: "HTML",
-        buttons
-      });
-      const ok = Boolean(res?.ok);
-      recipients.push({
-        userId: "group",
-        name: "IT Followup Group",
-        telegramId: String(groupChatId),
-        ok,
-        error: ok ? undefined : res?.description || "Telegram group delivery failed"
-      });
-    } catch (err: any) {
-      recipients.push({
-        userId: "group",
-        name: "IT Followup Group",
-        telegramId: String(groupChatId),
-        ok: false,
-        error: err?.message || "Unexpected group send error"
-      });
-    }
-  }
 
   return {
     ok: true,
