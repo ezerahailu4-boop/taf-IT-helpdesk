@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
       await handleMessage(db, update.message);
     } else if (update.callback_query) {
       await handleCallback(db, update.callback_query);
+    } else if (update.my_chat_member) {
+      await handleMyChatMember(db, update.my_chat_member);
     }
   } catch (err) {
     console.error("[telegram webhook] error handling update:", err);
@@ -113,10 +115,64 @@ function cleanName(val: string | null | undefined): string {
   return created;
 }
 
+async function handleMyChatMember(db: ReturnType<typeof supabaseAdmin>, myChatMember: any) {
+  const chat = myChatMember.chat;
+  const newStatus = myChatMember.new_chat_member?.status;
+  const isGroup = chat?.type === "group" || chat?.type === "supergroup";
+
+  if (isGroup && (newStatus === "member" || newStatus === "administrator")) {
+    await db.from("system_settings").upsert({
+      key: "it_group_chat_id",
+      value: chat.id,
+      updated_at: new Date().toISOString()
+    });
+  }
+}
+
 async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any) {
   const chatId = message.chat.id;
+  const isGroup = message.chat?.type === "group" || message.chat?.type === "supergroup";
   const text: string = (message.text ?? "").trim();
   const from = message.from;
+
+  // Handle Telegram group migration to supergroup
+  if (message.migrate_to_chat_id) {
+    await db.from("system_settings").upsert({
+      key: "it_group_chat_id",
+      value: message.migrate_to_chat_id,
+      updated_at: new Date().toISOString()
+    });
+    return;
+  }
+
+  // Handle bot added to group
+  if (
+    message.new_chat_members?.some(
+      (m: any) => m.id === 8921555430 || (m.is_bot && m.username?.toLowerCase() === "tafithelpdeskbot")
+    )
+  ) {
+    await db.from("system_settings").upsert({
+      key: "it_group_chat_id",
+      value: chatId,
+      updated_at: new Date().toISOString()
+    });
+    await sendMessage(
+      chatId,
+      `👋 <b>Hello ${message.chat?.title || "IT Followup"}!</b>\n\n` +
+      `✅ <b>TAF IT Helpdesk Bot is connected.</b>\n` +
+      `• Real-time ticket dispatches will be broadcasted here.\n` +
+      `• Daily Sub-Tasks executive PDF reports (5:00 PM) will be delivered here.\n` +
+      `• Use <code>/dailyreport</code> anytime to request today's PDF report.`,
+      { parseMode: "HTML" }
+    );
+    return;
+  }
+
+  // In groups, ignore non-command messages so the bot never spams regular group chat
+  if (isGroup && !text.startsWith("/")) {
+    return;
+  }
+
   const user = await upsertUserFromTelegram(db, from);
 
   // Check if this admin has a pending task revision comment waiting to be submitted
@@ -213,10 +269,10 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   const isExplicitNameCmd = lowerText.startsWith("/name") || lowerText.startsWith("/register");
 
   const slashWords = text.startsWith("/") ? text.slice(1).split(/\s+/).filter(Boolean) : [];
-  const knownSystemCmds = ["start", "help", "mytickets", "newticket", "support", "tech", "admin", "dailyreport"];
-  const isCustomSlashName = text.startsWith("/") && slashWords.length >= 2 && !knownSystemCmds.includes(slashWords[0].toLowerCase());
+  const knownSystemCmds = ["start", "help", "mytickets", "newticket", "support", "tech", "admin", "dailyreport", "status", "check"];
+  const isCustomSlashName = !isGroup && text.startsWith("/") && slashWords.length >= 2 && !knownSystemCmds.includes(slashWords[0].toLowerCase());
 
-  const isFreeTextName = !text.startsWith("/") && !isProperlyRegistered;
+  const isFreeTextName = !isGroup && !text.startsWith("/") && !isProperlyRegistered;
 
   if (isExplicitNameCmd || isCustomSlashName || isFreeTextName) {
     let rawName = text;
@@ -327,7 +383,14 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
   }
 
   if (text.toLowerCase().startsWith("/dailyreport")) {
-    if (user?.role !== "ADMIN") {
+    const { data: groupSetting } = await db
+      .from("system_settings")
+      .select("value")
+      .eq("key", "it_group_chat_id")
+      .maybeSingle();
+    const isAuthorizedGroup = isGroup && String(chatId) === String(groupSetting?.value);
+
+    if (user?.role !== "ADMIN" && !isAuthorizedGroup) {
       await sendMessage(
         chatId,
         `🔒 <b>Admin Only</b>\nThe daily sub-tasks PDF report is restricted to IT Administrators.`,
@@ -339,7 +402,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     const argDate = text.replace(/^\/dailyreport(?:@\S+)?\s*/i, "").trim();
     const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(argDate) ? argDate : undefined;
 
-    await sendMessage(chatId, `⏳ Generating your daily sub-tasks PDF report...`);
+    await sendMessage(chatId, `⏳ Generating daily sub-tasks PDF report...`);
     try {
       const res = await sendDailySubtasksPdfReport(db, {
         targetDate,
@@ -356,8 +419,25 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, message: any)
     return;
   }
 
+  if (text.startsWith("/status") || text.startsWith("/check")) {
+    await sendMessage(
+      chatId,
+      `🤖 <b>TAF IT Helpdesk Status</b>\n\n` +
+      `✅ <b>Active & Operational</b>\n` +
+      `📍 <b>Chat:</b> ${message.chat?.title || "Direct Chat"} (<code>${chatId}</code>)\n` +
+      `⚡ <b>Features:</b> Ticket Dispatches, SLA Alerts & 5:00 PM Daily PDF Reports.`,
+      { parseMode: "HTML" }
+    );
+    return;
+  }
+
   if (text.startsWith("/support")) {
     await sendMessage(chatId, "Opening IT Support...", { buttons: [[miniAppButton("🛠 Open IT Helpdesk", "/home")]] });
+    return;
+  }
+
+  // In groups, ignore other commands or free text so we don't spam the team chat
+  if (isGroup) {
     return;
   }
 

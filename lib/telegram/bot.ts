@@ -109,7 +109,11 @@ export async function setMyCommands() {
 }
 
 export async function setWebhook(url: string, secretToken: string) {
-  return callTelegram("setWebhook", { url, secret_token: secretToken, allowed_updates: ["message", "callback_query"] });
+  return callTelegram("setWebhook", {
+    url,
+    secret_token: secretToken,
+    allowed_updates: ["message", "callback_query", "my_chat_member"]
+  });
 }
 
 export async function setChatMenuButton(chatId?: number | string, url?: string) {

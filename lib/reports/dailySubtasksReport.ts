@@ -1504,7 +1504,41 @@ export async function sendDailySubtasksPdfReport(
     }
   }
 
-  const adminsNotified = recipients.filter((r) => r.ok).length;
+  const adminsNotified = recipients.filter((r) => r.ok && r.userId !== "group").length;
+
+  // Also dispatch to IT Support / Followup Group chat if configured in system_settings
+  const { data: groupSetting } = await db
+    .from("system_settings")
+    .select("value")
+    .eq("key", "it_group_chat_id")
+    .maybeSingle();
+
+  const groupChatId = groupSetting?.value;
+  if (groupChatId) {
+    try {
+      const res = await sendDocument(groupChatId, pdfBuffer, filename, {
+        caption,
+        parseMode: "HTML",
+        buttons
+      });
+      const ok = Boolean(res?.ok);
+      recipients.push({
+        userId: "group",
+        name: "IT Followup Group",
+        telegramId: String(groupChatId),
+        ok,
+        error: ok ? undefined : res?.description || "Telegram group delivery failed"
+      });
+    } catch (err: any) {
+      recipients.push({
+        userId: "group",
+        name: "IT Followup Group",
+        telegramId: String(groupChatId),
+        ok: false,
+        error: err?.message || "Unexpected group send error"
+      });
+    }
+  }
 
   return {
     ok: true,
