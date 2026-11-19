@@ -2779,6 +2779,7 @@ function ProjectTasksContent() {
                               const isImg = att.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
                               const isPdf = att.type === "application/pdf" || /\.pdf$/i.test(att.name);
                               const isDoc = att.type?.includes("word") || /\.(docx?)$/i.test(att.name);
+                              const isExcel = att.type?.includes("sheet") || att.type?.includes("excel") || att.type?.includes("csv") || /\.(xlsx?|csv)$/i.test(att.name);
 
                               return (
                                 <div
@@ -2801,7 +2802,7 @@ function ProjectTasksContent() {
                                       </button>
                                     ) : (
                                       <span className="text-xl shrink-0">
-                                        {isPdf ? "📄" : isDoc ? "📝" : "📎"}
+                                        {isPdf ? "📄" : isExcel ? "📊" : isDoc ? "📝" : "📎"}
                                       </span>
                                     )}
                                     <div className="min-w-0">
@@ -2810,7 +2811,7 @@ function ProjectTasksContent() {
                                       </p>
                                       <p className="text-[10px] text-slate-400">
                                         {att.size ? `${Math.round(att.size / 1024)} KB • ` : ""}
-                                        {isImg ? "Photo" : isPdf ? "PDF Document" : isDoc ? "Word Document" : "Attachment"}
+                                        {isImg ? "Photo" : isPdf ? "PDF Document" : isExcel ? "Excel Spreadsheet" : isDoc ? "Word Document" : "Attachment"}
                                       </p>
                                     </div>
                                   </div>
@@ -2832,9 +2833,9 @@ function ProjectTasksContent() {
                                       rel="noopener noreferrer"
                                       download={!isPdf && !isImg ? att.name : undefined}
                                       className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-1"
-                                      title={isPdf ? "Open PDF" : isDoc ? "Download Word Doc" : "Open File"}
+                                      title={isPdf ? "Open PDF" : isExcel ? "Download Excel File" : isDoc ? "Download Word Doc" : "Open File"}
                                     >
-                                      <span>{isPdf ? "View PDF" : isDoc ? "Download" : "Open"}</span>
+                                      <span>{isPdf ? "View PDF" : isExcel ? "Download Excel" : isDoc ? "Download" : "Open"}</span>
                                       <span className="text-[9px]">↗</span>
                                     </a>
                                   </div>
@@ -2868,13 +2869,13 @@ function ProjectTasksContent() {
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
 
-              {/* Attachment Picker & Previews (PDF, Word DOCX, Photos) */}
+              {/* Attachment Picker & Previews (PDF, Excel, Word DOCX, Photos) */}
               <div className="space-y-2">
                 <input
                   type="file"
                   ref={fileInputRef}
                   multiple
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,image/*"
                   className="hidden"
                   onChange={handleFileSelect}
                 />
@@ -2882,7 +2883,7 @@ function ProjectTasksContent() {
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
                     <span>📎</span>
-                    <span>Attach Deliverables (PDF, Word DOCX, or Photos)</span>
+                    <span>Attach Deliverables (PDF, Excel, Word DOCX, or Photos)</span>
                   </label>
                   {reportAttachments.length > 0 && (
                     <button
@@ -2900,11 +2901,11 @@ function ProjectTasksContent() {
                   className="border-2 border-dashed border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-xl p-3 text-center cursor-pointer bg-white/60 dark:bg-slate-900/40 hover:bg-white dark:hover:bg-slate-900 transition-all flex flex-col items-center justify-center gap-1 group"
                 >
                   <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs group-hover:scale-105 transition-transform">
-                    <span>📸 / 📄 / 📝</span>
-                    <span>Click to add PDF, Word DOCX, or Photos</span>
+                    <span>📸 / 📄 / 📊 / 📝</span>
+                    <span>Click to add PDF, Excel, Word DOCX, or Photos</span>
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                    Supports PDFs, Word documents (.docx/.doc), and photos (JPG, PNG, WEBP) up to 20MB
+                    Supports PDFs, Excel spreadsheets (.xlsx/.xls/.csv), Word documents (.docx/.doc), and photos (JPG, PNG, WEBP) up to 20MB
                   </p>
                 </div>
 
@@ -2914,6 +2915,7 @@ function ProjectTasksContent() {
                       const isImage = f.type.startsWith("image/");
                       const isPdf = f.type === "application/pdf" || f.name.endsWith(".pdf");
                       const isDoc = f.type.includes("word") || f.name.endsWith(".docx") || f.name.endsWith(".doc");
+                      const isExcel = f.type.includes("sheet") || f.type.includes("excel") || f.type.includes("csv") || /\.(xlsx?|csv)$/i.test(f.name);
 
                       return (
                         <div
@@ -2922,12 +2924,12 @@ function ProjectTasksContent() {
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-base shrink-0">
-                              {isImage ? "🖼️" : isPdf ? "📄" : isDoc ? "📝" : "📎"}
+                              {isImage ? "🖼️" : isPdf ? "📄" : isExcel ? "📊" : isDoc ? "📝" : "📎"}
                             </span>
                             <div className="min-w-0">
                               <p className="font-semibold text-slate-800 dark:text-slate-200 truncate text-[11px]">{f.name}</p>
                               <p className="text-[10px] text-slate-400">
-                                {Math.round(f.size / 1024)} KB • {isImage ? "Photo" : isPdf ? "PDF" : isDoc ? "Word Doc" : "File"}
+                                {Math.round(f.size / 1024)} KB • {isImage ? "Photo" : isPdf ? "PDF" : isExcel ? "Excel" : isDoc ? "Word Doc" : "File"}
                               </p>
                             </div>
                           </div>

@@ -10,6 +10,11 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
   "application/msword", // .doc
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+  "text/csv", // .csv
+  "application/csv",
+  "text/plain",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -49,10 +54,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const fileName = file.name || "attachment";
     const ext = fileName.split(".").pop()?.toLowerCase();
 
-    if (!fileType || fileType === "application/octet-stream") {
+    if (!fileType || fileType === "application/octet-stream" || fileType === "application/x-zip-compressed") {
       if (ext === "pdf") fileType = "application/pdf";
       else if (ext === "docx") fileType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
       else if (ext === "doc") fileType = "application/msword";
+      else if (ext === "xlsx") fileType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      else if (ext === "xls") fileType = "application/vnd.ms-excel";
+      else if (ext === "csv") fileType = "text/csv";
       else if (ext === "jpg" || ext === "jpeg") fileType = "image/jpeg";
       else if (ext === "png") fileType = "image/png";
       else if (ext === "webp") fileType = "image/webp";
@@ -61,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (!ALLOWED_MIME_TYPES.has(fileType)) {
       return NextResponse.json(
-        { error: "Unsupported file type. Please upload a PDF, DOCX/DOC, or photo (JPG/PNG/WEBP)." },
+        { error: "Unsupported file type. Please upload a PDF, Excel spreadsheet (.xlsx/.xls/.csv), Word document (.docx/.doc), or photo (JPG/PNG/WEBP)." },
         { status: 400 }
       );
     }
